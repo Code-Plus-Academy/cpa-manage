@@ -3,8 +3,8 @@
   "/admins/page": "app/admins/page.js",
   "/audit/page": "app/audit/page.js",
   "/copyright/page": "app/copyright/page.js",
-  "/institutions/page": "app/institutions/page.js",
   "/moderation/page": "app/moderation/page.js",
+  "/institutions/page": "app/institutions/page.js",
   "/page": "app/page.js",
   "/tickets/[id]/page": "app/tickets/[id]/page.js",
   "/root/login/page": "app/root/login/page.js"

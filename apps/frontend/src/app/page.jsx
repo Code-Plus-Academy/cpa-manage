@@ -28,7 +28,6 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
 
@@ -74,13 +73,13 @@ export default function AdminDashboard() {
         const res = await fetch(`${apiUrl}/admin/cases`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
-          setTickets(data.tickets || []);
+          setTickets(data.cases || []);
         }
       } else if (tab === 'copyright') {
-        const res = await fetch(`${apiUrl}/admin/claims/copyright`, { credentials: 'include' });
+        const res = await fetch(`${apiUrl}/admin/cases?type=copyright`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
-          setCopyrightClaims(data.claims || []);
+          setCopyrightClaims(data.cases || []);
         }
       } else if (tab === 'moderation') {
         const res = await fetch(`${apiUrl}/admin/users/reports`, { credentials: 'include' });
@@ -96,7 +95,7 @@ export default function AdminDashboard() {
         }
       }
     } catch (err) {
-      // Backend live endpoint fallback (handling initial Phase 0 unmounted routes)
+      // Unauthenticated or API network error
     } finally {
       setDataLoading(false);
     }
@@ -163,100 +162,191 @@ export default function AdminDashboard() {
     );
   }
 
+  // Render Login Screen if not authenticated
+  if (!adminUser) {
+    return (
+      <main style={{ minHeight: '100vh', padding: '2rem 1rem', maxWidth: '420px', margin: '4rem auto 0 auto' }}>
+        <div className="glass-panel" style={{ padding: '2rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+            <Lock size={36} color="#6366f1" style={{ marginBottom: '8px' }} />
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Admin Login</h2>
+            <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>Access manage.codeplusacademy.in portal</p>
+          </div>
+
+          {error && (
+            <div style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              color: '#f87171',
+              padding: '10px 14px',
+              borderRadius: '8px',
+              fontSize: '0.85rem',
+              marginBottom: '1.25rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <AlertCircle size={18} />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '6px' }}>Email Address</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="admin@codeplusacademy.in"
+                  className="glass-input"
+                  style={{ width: '100%', paddingLeft: '38px' }}
+                />
+                <Mail size={18} color="#94a3b8" style={{ position: 'absolute', left: 12, top: 12 }} />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '6px' }}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="glass-input"
+                  style={{ width: '100%', paddingLeft: '38px' }}
+                />
+                <Key size={18} color="#94a3b8" style={{ position: 'absolute', left: 12, top: 12 }} />
+              </div>
+            </div>
+
+            {totpRequired && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#6366f1', fontWeight: 600, marginBottom: '6px' }}>2FA TOTP Authenticator Code</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={6}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
+                  placeholder="123456"
+                  className="glass-input"
+                  style={{ width: '100%', letterSpacing: '4px', textAlign: 'center', borderColor: '#6366f1' }}
+                />
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary"
+              style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', opacity: submitting ? 0.7 : 1 }}
+            >
+              {submitting ? 'Authenticating...' : totpRequired ? 'Verify 2FA & Sign In' : 'Sign In to Admin Portal'}
+            </button>
+          </form>
+        </div>
+      </main>
+    );
+  }
+
+  // Render Authenticated Admin Dashboard
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       {/* Sidebar Navigation */}
-      {adminUser && (
-        <aside style={{
-          width: '260px',
-          background: 'rgba(15, 23, 42, 0.95)',
-          borderRight: '1px solid var(--border-color)',
-          padding: '1.5rem 1rem',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            {/* Brand Logo */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', paddingLeft: '0.5rem' }}>
-              <div style={{
-                background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
-                padding: '8px',
-                borderRadius: '10px',
-                display: 'flex',
-                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
-              }}>
-                <ShieldCheck size={24} color="#ffffff" />
-              </div>
-              <div>
-                <h1 style={{ fontSize: '1.15rem', fontWeight: 800, background: 'linear-gradient(90deg, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                  CPA MANAGE
-                </h1>
-                <span style={{ fontSize: '0.7rem', color: '#6366f1', fontWeight: 600, letterSpacing: '0.5px' }}>TRUST & SAFETY PLATFORM</span>
-              </div>
+      <aside style={{
+        width: '260px',
+        background: 'rgba(15, 23, 42, 0.95)',
+        borderRight: '1px solid var(--border-color)',
+        padding: '1.5rem 1rem',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between'
+      }}>
+        <div>
+          {/* Brand Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2rem', paddingLeft: '0.5rem' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #6366f1 0%, #ec4899 100%)',
+              padding: '8px',
+              borderRadius: '10px',
+              display: 'flex',
+              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)'
+            }}>
+              <ShieldCheck size={24} color="#ffffff" />
             </div>
-
-            {/* Nav Menu */}
-            <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-              {[
-                { id: 'overview', label: 'Overview & Stats', icon: PieChart },
-                { id: 'tickets', label: 'Support Queue', icon: Ticket, badge: tickets.length > 0 ? String(tickets.length) : null },
-                { id: 'copyright', label: 'Copyright & DMCA', icon: Scale, badge: copyrightClaims.length > 0 ? String(copyrightClaims.length) : null },
-                { id: 'institutions', label: 'Institution Claims', icon: Building2 },
-                { id: 'moderation', label: 'User Moderation', icon: UserX },
-                { id: 'email', label: 'Email Campaigns', icon: Mail },
-                { id: 'audit', label: 'Audit Logs', icon: FileText },
-                ...(adminUser.is_root ? [{ id: 'admins', label: 'Admin Access Control', icon: Users }] : [])
-              ].map((item) => {
-                const IconComponent = item.icon;
-                const isActive = activeTab === item.id;
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => setActiveTab(item.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      fontSize: '0.88rem',
-                      fontWeight: isActive ? 600 : 400,
-                      color: isActive ? '#ffffff' : '#94a3b8',
-                      background: isActive ? 'linear-gradient(90deg, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0.05) 100%)' : 'transparent',
-                      borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
-                      transition: 'all 0.15s ease'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <IconComponent size={18} color={isActive ? '#818cf8' : '#64748b'} />
-                      <span>{item.label}</span>
-                    </div>
-                    {item.badge && (
-                      <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '12px', backgroundColor: isActive ? '#6366f1' : '#334155', color: '#fff' }}>
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </nav>
+            <div>
+              <h1 style={{ fontSize: '1.15rem', fontWeight: 800, background: 'linear-gradient(90deg, #fff, #94a3b8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                CPA MANAGE
+              </h1>
+              <span style={{ fontSize: '0.7rem', color: '#6366f1', fontWeight: 600, letterSpacing: '0.5px' }}>TRUST & SAFETY PLATFORM</span>
+            </div>
           </div>
 
-          {/* User Profile Card Footer */}
-          <div className="glass-panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ overflow: 'hidden' }}>
-              <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adminUser.display_name}</p>
-              <span style={{ fontSize: '0.72rem', color: adminUser.is_root ? '#a855f7' : '#34d399', fontWeight: 600 }}>
-                {adminUser.is_root ? '👑 Root Administrator' : '🛡️ Moderation Worker'}
-              </span>
-            </div>
-            <button onClick={handleLogout} title="Logout" style={{ background: 'transparent', border: 'none', color: '#f87171', padding: '6px', cursor: 'pointer' }}>
-              <LogOut size={18} />
-            </button>
+          {/* Nav Menu */}
+          <nav style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+            {[
+              { id: 'overview', label: 'Overview & Stats', icon: PieChart },
+              { id: 'tickets', label: 'Support Queue', icon: Ticket, badge: tickets.length > 0 ? String(tickets.length) : null },
+              { id: 'copyright', label: 'Copyright & DMCA', icon: Scale, badge: copyrightClaims.length > 0 ? String(copyrightClaims.length) : null },
+              { id: 'institutions', label: 'Institution Claims', icon: Building2 },
+              { id: 'moderation', label: 'User Moderation', icon: UserX },
+              { id: 'email', label: 'Email Campaigns', icon: Mail },
+              { id: 'audit', label: 'Audit Logs', icon: FileText },
+              ...(adminUser.is_root ? [{ id: 'admins', label: 'Admin Access Control', icon: Users }] : [])
+            ].map((item) => {
+              const IconComponent = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    fontSize: '0.88rem',
+                    fontWeight: isActive ? 600 : 400,
+                    color: isActive ? '#ffffff' : '#94a3b8',
+                    background: isActive ? 'linear-gradient(90deg, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0.05) 100%)' : 'transparent',
+                    borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <IconComponent size={18} color={isActive ? '#818cf8' : '#64748b'} />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span style={{ fontSize: '0.7rem', padding: '2px 7px', borderRadius: '12px', backgroundColor: isActive ? '#6366f1' : '#334155', color: '#fff' }}>
+                      {item.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* User Profile Card Footer */}
+        <div className="glass-panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ overflow: 'hidden' }}>
+            <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adminUser.display_name}</p>
+            <span style={{ fontSize: '0.72rem', color: adminUser.is_root ? '#a855f7' : '#34d399', fontWeight: 600 }}>
+              {adminUser.is_root ? '👑 Root Administrator' : '🛡️ Moderation Worker'}
+            </span>
           </div>
-        </aside>
-      )}
+          <button onClick={handleLogout} title="Logout" style={{ background: 'transparent', border: 'none', color: '#f87171', padding: '6px', cursor: 'pointer' }}>
+            <LogOut size={18} />
+          </button>
+        </div>
+      </aside>
 
       {/* Main App Content Body */}
       <main style={{ flex: 1, padding: '1.5rem 2rem', overflowY: 'auto' }}>
@@ -281,7 +371,7 @@ export default function AdminDashboard() {
               {activeTab === 'admins' && 'Admin Accounts & IAM Permission Matrix'}
             </h2>
             <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '2px' }}>
-              Logged in as <strong style={{ color: '#fff' }}>{adminUser ? adminUser.email : 'Guest'}</strong> • Live Database Active
+              Logged in as <strong style={{ color: '#fff' }}>{adminUser.email}</strong> • Live Database Active
             </p>
           </div>
 
@@ -459,7 +549,7 @@ export default function AdminDashboard() {
         )}
 
         {/* Tab 8: ADMIN ACCESS CONTROL (Root Only) */}
-        {activeTab === 'admins' && adminUser?.is_root && (
+        {activeTab === 'admins' && adminUser.is_root && (
           <div className="glass-panel" style={{ padding: '1.5rem' }}>
             <h3 style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>IAM Permission Matrix & Worker Management</h3>
             <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginBottom: '1.5rem' }}>As Root Administrator, you can assign any of the 21 fixed permissions to worker accounts. (`admin.manage` is root-only and non-assignable).</p>
@@ -470,95 +560,5 @@ export default function AdminDashboard() {
         )}
       </main>
     </div>
-  );
-
-  return (
-    <main style={{ minHeight: '100vh', padding: '2rem 1rem', maxWidth: '420px', margin: '4rem auto 0 auto' }}>
-      {/* Login Card */}
-      <div className="glass-panel" style={{ padding: '2rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)' }}>
-        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <Lock size={36} color="#6366f1" style={{ marginBottom: '8px' }} />
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Admin Login</h2>
-          <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '4px' }}>Access manage.codeplusacademy.in portal</p>
-        </div>
-
-        {error && (
-          <div style={{
-            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            color: '#f87171',
-            padding: '10px 14px',
-            borderRadius: '8px',
-            fontSize: '0.85rem',
-            marginBottom: '1.25rem',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px'
-          }}>
-            <AlertCircle size={18} />
-            <span>{error}</span>
-          </div>
-        )}
-
-        <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '6px' }}>Email Address</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@codeplusacademy.in"
-                className="glass-input"
-                style={{ width: '100%', paddingLeft: '38px' }}
-              />
-              <Mail size={18} color="#94a3b8" style={{ position: 'absolute', left: 12, top: 12 }} />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '1.25rem' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', color: '#cbd5e1', marginBottom: '6px' }}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••••••"
-                className="glass-input"
-                style={{ width: '100%', paddingLeft: '38px' }}
-              />
-              <Key size={18} color="#94a3b8" style={{ position: 'absolute', left: 12, top: 12 }} />
-            </div>
-          </div>
-
-          {totpRequired && (
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'block', fontSize: '0.8rem', color: '#6366f1', fontWeight: 600, marginBottom: '6px' }}>2FA TOTP Authenticator Code</label>
-              <input
-                type="text"
-                required
-                maxLength={6}
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value)}
-                placeholder="123456"
-                className="glass-input"
-                style={{ width: '100%', letterSpacing: '4px', textAlign: 'center', borderColor: '#6366f1' }}
-              />
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="btn-primary"
-            style={{ width: '100%', justifyContent: 'center', marginTop: '0.5rem', opacity: submitting ? 0.7 : 1 }}
-          >
-            {submitting ? 'Authenticating...' : totpRequired ? 'Verify 2FA & Sign In' : 'Sign In to Admin Portal'}
-          </button>
-        </form>
-      </div>
-    </main>
   );
 }
