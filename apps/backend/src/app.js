@@ -11,6 +11,10 @@ const errorHandler = require('./middleware/errorHandler');
 const requireAdminAuth = require('./middleware/requireAdminAuth');
 const authRoutes = require('./routes/auth');
 const healthzRoutes = require('./routes/healthz');
+const casesRoutes = require('./routes/cases');
+const adminsRoutes = require('./routes/admins');
+const usersRoutes = require('./routes/users');
+const institutionClaimsRoutes = require('./routes/institutionClaims');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -23,6 +27,7 @@ app.use(cors({
       /^http:\/\/localhost:\d+$/,
       /^https:\/\/manage\.codeplusacademy\.in$/,
       /^https:\/\/.*\.codeplusacademy\.in$/,
+      /^https:\/\/.*\.pages\.dev$/,
     ];
     if (allowedPatterns.some(p => p.test(origin))) {
       callback(null, true);
@@ -48,9 +53,11 @@ app.use('/admin/auth', authRoutes);
 // ─── Admin auth gate (everything under /admin/* except /admin/auth) ────────────
 app.use('/admin', requireAdminAuth);
 
-// ─── Admin routes (populated in later phases) ──────────────────────────────────
-// app.use('/admin/cases', requirePermission.any([...]), ticketRoutes);
-// app.use('/admin/admins', requirePermission.rootOnly, adminRoutes);
+// ─── Admin routes ──────────────────────────────────────────────────────────────
+app.use('/admin/cases', casesRoutes);
+app.use('/admin/admins', adminsRoutes);
+app.use('/admin/users', usersRoutes);
+app.use('/admin/claims/institution', institutionClaimsRoutes);
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
