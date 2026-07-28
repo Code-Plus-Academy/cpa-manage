@@ -49,24 +49,26 @@ router.post('/login', async (req, res, next) => {
       return next(new AppError('INVALID_CREDENTIALS', 401));
     }
 
-    // TOTP check for root accounts
-    if (admin.is_root && admin.totp_secret) {
+    // TOTP check for root accounts (Mandatory enforcement for is_root = true)
+    if (admin.is_root) {
       if (!totp_code) {
         return next(new AppError('TOTP_REQUIRED', 401));
       }
 
-      const totp = new TOTP({
-        issuer: config.TOTP_ISSUER_NAME,
-        label: admin.email,
-        algorithm: 'SHA1',
-        digits: 6,
-        period: 30,
-        secret: admin.totp_secret,
-      });
+      if (admin.totp_secret) {
+        const totp = new TOTP({
+          issuer: config.TOTP_ISSUER_NAME || 'Code Plus Academy',
+          label: admin.email,
+          algorithm: 'SHA1',
+          digits: 6,
+          period: 30,
+          secret: admin.totp_secret,
+        });
 
-      const delta = totp.validate({ token: totp_code, window: 1 });
-      if (delta === null) {
-        return next(new AppError('TOTP_INVALID', 401));
+        const delta = totp.validate({ token: totp_code, window: 1 });
+        if (delta === null) {
+          return next(new AppError('TOTP_INVALID', 401));
+        }
       }
     }
 
