@@ -4,8 +4,8 @@
   "/audit/page": "app/audit/page.js",
   "/copyright/page": "app/copyright/page.js",
   "/moderation/page": "app/moderation/page.js",
+  "/tickets/detail/page": "app/tickets/detail/page.js",
   "/institutions/page": "app/institutions/page.js",
-  "/page": "app/page.js",
-  "/tickets/[id]/page": "app/tickets/[id]/page.js",
-  "/root/login/page": "app/root/login/page.js"
+  "/root/login/page": "app/root/login/page.js",
+  "/page": "app/page.js"
 }

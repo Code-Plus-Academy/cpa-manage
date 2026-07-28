@@ -73,7 +73,7 @@ export default function AdminCopyrightPage() {
                   <td style={{ padding: 12 }}>{c.reporter_email}</td>
                   <td style={{ padding: 12 }}>{c.status}</td>
                   <td style={{ padding: 12 }}>
-                    <button onClick={() => router.push(`/tickets/${c.id}`)} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
+                    <button onClick={() => router.push(`/tickets/detail?id=${c.id}`)} className="btn-secondary" style={{ fontSize: '0.8rem', padding: '4px 10px' }}>
                       Review Claim
                     </button>
                   </td>
