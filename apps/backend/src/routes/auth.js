@@ -1,0 +1,175 @@
+/**
+ * Admin auth routes (PLAN.md §3.4).
+ * POST /admin/auth/login
+ * GET  /admin/auth/me
+ * POST /admin/auth/logout
+ */
+const express = require('express');
+const router = express.Router();
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+const { TOTP } = require('otpauth');
+const { query, getClient } = require('../config/db');
+const { AppError } = require('../utils/errors');
+const { getPermissionsForAdmin } = require('../services/permissionService');
+const { writeAuditLog } = require('../middleware/auditLog');
+const config = require('../config');
+
+const COOKIE_NAME = config.ADMIN_SESSION_COOKIE_NAME || 'cpa_admin_token';
+const SESSION_MAX_AGE_DAYS = 30;
+
+// ─── POST /admin/auth/login ────────────────────────────────────────────────────
+router.post('/login', async (req, res, next) => {
+  try {
+    const { email, password, totp_code } = req.body;
+
+    if (!email || !password) {
+      return next(new AppError('VALIDATION_ERROR', 400, { fields: { email: !email ? 'required' : undefined, password: !password ? 'required' : undefined } }));
+    }
+
+    // Find admin user
+    const { rows } = await query(
+      'SELECT id, email, password_hash, display_name, is_root, totp_secret, status FROM admin_users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+
+    if (rows.length === 0) {
+      return next(new AppError('INVALID_CREDENTIALS', 401));
+    }
+
+    const admin = rows[0];
+
+    if (admin.status !== 'active') {
+      return next(new AppError('INVALID_CREDENTIALS', 401));
+    }
+
+    // Verify password
+    const passwordValid = await bcrypt.compare(password, admin.password_hash);
+    if (!passwordValid) {
+      return next(new AppError('INVALID_CREDENTIALS', 401));
+    }
+
+    // TOTP check for root accounts
+    if (admin.is_root && admin.totp_secret) {
+      if (!totp_code) {
+        return next(new AppError('TOTP_REQUIRED', 401));
+      }
+
+      const totp = new TOTP({
+        issuer: config.TOTP_ISSUER_NAME,
+        label: admin.email,
+        algorithm: 'SHA1',
+        digits: 6,
+        period: 30,
+        secret: admin.totp_secret,
+      });
+
+      const delta = totp.validate({ token: totp_code, window: 1 });
+      if (delta === null) {
+        return next(new AppError('TOTP_INVALID', 401));
+      }
+    }
+
+    // Create session
+    const rawToken = crypto.randomBytes(48).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
+
+    await query(
+      'INSERT INTO admin_sessions (admin_user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [admin.id, tokenHash, expiresAt]
+    );
+
+    // Update last_login_at
+    await query('UPDATE admin_users SET last_login_at = NOW() WHERE id = $1', [admin.id]);
+
+    // Load permissions
+    const permissions = await getPermissionsForAdmin(admin.id);
+
+    // Set HTTP-only cookie
+    res.cookie(COOKIE_NAME, rawToken, {
+      httpOnly: true,
+      secure: config.NODE_ENV === 'production',
+      sameSite: 'lax',
+      domain: config.ADMIN_COOKIE_DOMAIN || undefined,
+      maxAge: SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
+      path: '/',
+    });
+
+    res.json({
+      admin_user: {
+        id: admin.id,
+        email: admin.email,
+        display_name: admin.display_name,
+        is_root: admin.is_root,
+        permissions,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── GET /admin/auth/me ────────────────────────────────────────────────────────
+router.get('/me', async (req, res, next) => {
+  try {
+    const token = req.cookies?.[COOKIE_NAME];
+    if (!token) {
+      return next(new AppError('SESSION_EXPIRED', 401));
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const { rows } = await query(
+      `SELECT a.id, a.email, a.display_name, a.is_root, a.status
+       FROM admin_sessions s
+       JOIN admin_users a ON a.id = s.admin_user_id
+       WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
+      [tokenHash]
+    );
+
+    if (rows.length === 0 || rows[0].status !== 'active') {
+      return next(new AppError('SESSION_EXPIRED', 401));
+    }
+
+    const admin = rows[0];
+    const permissions = await getPermissionsForAdmin(admin.id);
+
+    res.json({
+      admin_user: {
+        id: admin.id,
+        email: admin.email,
+        display_name: admin.display_name,
+        is_root: admin.is_root,
+        permissions,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /admin/auth/logout ───────────────────────────────────────────────────
+router.post('/logout', async (req, res, next) => {
+  try {
+    const token = req.cookies?.[COOKIE_NAME];
+    if (token) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      await query('DELETE FROM admin_sessions WHERE token_hash = $1', [tokenHash]);
+    }
+
+    res.clearCookie(COOKIE_NAME, {
+      httpOnly: true,
+      secure: config.NODE_ENV === 'production',
+      sameSite: 'lax',
+      domain: config.ADMIN_COOKIE_DOMAIN || undefined,
+      path: '/',
+    });
+
+    res.json({});
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;

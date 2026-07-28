@@ -1,0 +1,6 @@
+{
+  "name": "cpa-proto",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared protobuf contracts for cpa-manage-backend <-> cpa-main-backend gRPC communication"
+}

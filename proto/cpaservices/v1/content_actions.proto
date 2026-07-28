@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package cpaservices.v1;
+
+service ContentActions {
+  rpc GetContentSummary (ContentRef) returns (ContentSummary);
+  rpc SetContentStatus (SetContentStatusRequest) returns (SetContentStatusResponse);
+  rpc TransferOwnership (TransferOwnershipRequest) returns (TransferOwnershipResponse);
+  rpc FindContentBySourceUrl (SourceUrlQuery) returns (ContentMatchList);
+}
+
+message ContentRef {
+  string content_type = 1;
+  string content_id = 2;
+}
+
+message ContentSummary {
+  string content_id = 1;
+  string title = 2;
+  string thumbnail_url = 3;
+  string owner_id = 4;
+  string owner_username = 5;
+  string created_at = 6;
+  string moderation_status = 7;
+}
+
+message SetContentStatusRequest {
+  ContentRef ref = 1;
+  string new_status = 2;
+  string reason = 3;
+  string actor_admin_id = 4;
+}
+
+message SetContentStatusResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message TransferOwnershipRequest {
+  ContentRef ref = 1;
+  string new_owner_user_id = 2;
+  bool keep_original_as_shared_by = 3;
+  string actor_admin_id = 4;
+}
+
+message TransferOwnershipResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message SourceUrlQuery {
+  string platform_handle_or_url = 1;
+}
+
+message ContentMatchList {
+  repeated ContentSummary matches = 1;
+}

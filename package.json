@@ -1,0 +1,10 @@
+{
+  "name": "cpa-manage",
+  "private": true,
+  "workspaces": ["apps/*", "proto"],
+  "scripts": {
+    "backend:dev": "cd apps/backend && npm run dev",
+    "backend:start": "cd apps/backend && npm start",
+    "proto:gen": "echo 'Proto generation - see proto/README.md'"
+  }
+}

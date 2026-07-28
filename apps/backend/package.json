@@ -1,0 +1,30 @@
+{
+  "name": "cpa-manage-backend",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/db/runMigrations.js",
+    "seed:root": "node src/db/seedRootAdmin.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "cookie-parser": "^1.4.6",
+    "bcrypt": "^5.1.1",
+    "otpauth": "^9.3.0",
+    "pino": "^9.4.0",
+    "pino-pretty": "^11.3.0",
+    "@grpc/grpc-js": "^1.12.0",
+    "@grpc/proto-loader": "^0.7.13",
+    "helmet": "^8.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "crypto": "*"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
