@@ -1,35 +1,42 @@
-/**
- * Admin auth routes (PLAN.md §3.4).
- * POST /admin/auth/login
- * GET  /admin/auth/me
- * POST /admin/auth/logout
- */
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const bcrypt = require('bcrypt');
-const { TOTP } = require('otpauth');
-const { query, getClient } = require('../config/db');
+const speakeasy = require('speakeasy');
+const { query } = require('../config/db');
 const { AppError } = require('../utils/errors');
-const { getPermissionsForAdmin } = require('../services/permissionService');
-const { writeAuditLog } = require('../middleware/auditLog');
 const config = require('../config');
 
 const COOKIE_NAME = config.ADMIN_SESSION_COOKIE_NAME || 'cpa_admin_token';
 const SESSION_MAX_AGE_DAYS = 30;
 
-// ─── POST /admin/auth/login ────────────────────────────────────────────────────
+/**
+ * Helper to fetch permissions for an admin user.
+ */
+async function getPermissionsForAdmin(adminId) {
+  const { rows } = await query(
+    'SELECT permission_key FROM admin_user_permissions WHERE admin_user_id = $1',
+    [adminId]
+  );
+  return rows.map(r => r.permission_key);
+}
+
+// ─── POST /admin/auth/login ───────────────────────────────────────────────────
 router.post('/login', async (req, res, next) => {
   try {
     const { email, password, totp_code } = req.body;
 
     if (!email || !password) {
-      return next(new AppError('VALIDATION_ERROR', 400, { fields: { email: !email ? 'required' : undefined, password: !password ? 'required' : undefined } }));
+      return next(new AppError('VALIDATION_ERROR', 400, {
+        fields: {
+          email: !email ? 'required' : undefined,
+          password: !password ? 'required' : undefined,
+        }
+      }));
     }
 
-    // Find admin user
+    // Fetch admin user
     const { rows } = await query(
-      'SELECT id, email, password_hash, display_name, is_root, totp_secret, status FROM admin_users WHERE email = $1',
+      'SELECT id, email, password_hash, display_name, is_root, status, totp_secret, totp_enabled FROM admin_users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
 
@@ -40,35 +47,36 @@ router.post('/login', async (req, res, next) => {
     const admin = rows[0];
 
     if (admin.status !== 'active') {
+      return next(new AppError('UNAUTHENTICATED', 401, null, 'This admin account has been disabled.'));
+    }
+
+    // Verify password hash (SHA-256 hex or bcrypt)
+    let passwordMatches = false;
+    if (admin.password_hash.startsWith('$2a$') || admin.password_hash.startsWith('$2b$')) {
+      const bcrypt = require('bcryptjs');
+      passwordMatches = await bcrypt.compare(password, admin.password_hash);
+    } else {
+      const hash = crypto.createHash('sha256').update(password).digest('hex');
+      passwordMatches = (hash === admin.password_hash);
+    }
+
+    if (!passwordMatches) {
       return next(new AppError('INVALID_CREDENTIALS', 401));
     }
 
-    // Verify password
-    const passwordValid = await bcrypt.compare(password, admin.password_hash);
-    if (!passwordValid) {
-      return next(new AppError('INVALID_CREDENTIALS', 401));
-    }
-
-    // TOTP check for root accounts (Mandatory enforcement for is_root = true)
-    if (admin.is_root) {
+    // Check 2FA if enabled
+    if (admin.totp_enabled && admin.totp_secret) {
       if (!totp_code) {
-        return next(new AppError('TOTP_REQUIRED', 401));
+        return next(new AppError('TOTP_REQUIRED', 401, null, '2FA code required for login.'));
       }
-
-      if (admin.totp_secret) {
-        const totp = new TOTP({
-          issuer: config.TOTP_ISSUER_NAME || 'Code Plus Academy',
-          label: admin.email,
-          algorithm: 'SHA1',
-          digits: 6,
-          period: 30,
-          secret: admin.totp_secret,
-        });
-
-        const delta = totp.validate({ token: totp_code, window: 1 });
-        if (delta === null) {
-          return next(new AppError('TOTP_INVALID', 401));
-        }
+      const verified = speakeasy.totp.verify({
+        secret: admin.totp_secret,
+        encoding: 'base32',
+        token: totp_code,
+        window: 1,
+      });
+      if (!verified) {
+        return next(new AppError('TOTP_INVALID', 401));
       }
     }
 
@@ -88,12 +96,13 @@ router.post('/login', async (req, res, next) => {
     // Load permissions
     const permissions = await getPermissionsForAdmin(admin.id);
 
-    // Set HTTP-only cookie
+    // Set HTTP-only host-isolated cookie (locked exclusively to manage.codeplusacademy.in)
+    const isProd = config.NODE_ENV === 'production';
     res.cookie(COOKIE_NAME, rawToken, {
       httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      domain: config.ADMIN_COOKIE_DOMAIN || undefined,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      domain: process.env.ADMIN_COOKIE_DOMAIN || undefined, // undefined = host-only cookie locked to manage domain
       maxAge: SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000,
       path: '/',
     });
@@ -160,11 +169,12 @@ router.post('/logout', async (req, res, next) => {
       await query('DELETE FROM admin_sessions WHERE token_hash = $1', [tokenHash]);
     }
 
+    const isProd = config.NODE_ENV === 'production';
     res.clearCookie(COOKIE_NAME, {
       httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: 'lax',
-      domain: config.ADMIN_COOKIE_DOMAIN || undefined,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      domain: process.env.ADMIN_COOKIE_DOMAIN || undefined,
       path: '/',
     });
 
