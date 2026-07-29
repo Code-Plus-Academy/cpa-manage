@@ -36,7 +36,7 @@ router.post('/login', async (req, res, next) => {
 
     // Fetch admin user
     const { rows } = await query(
-      'SELECT id, email, password_hash, display_name, is_root, status, totp_secret, totp_enabled FROM admin_users WHERE email = $1',
+      'SELECT id, email, password_hash, display_name, is_root, status, totp_secret FROM admin_users WHERE email = $1',
       [email.toLowerCase().trim()]
     );
 
@@ -65,7 +65,7 @@ router.post('/login', async (req, res, next) => {
     }
 
     // Check 2FA if enabled
-    if (admin.totp_enabled && admin.totp_secret) {
+    if (admin.totp_secret) {
       if (!totp_code) {
         return next(new AppError('TOTP_REQUIRED', 401, null, '2FA code required for login.'));
       }
