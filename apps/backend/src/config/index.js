@@ -19,6 +19,8 @@ const OPTIONAL_VARS = {
   TOTP_ISSUER_NAME: 'CodePlusAcademy',
   EMAIL_PROVIDER_API_KEY: '',
   EMAIL_FROM_ADDRESS: 'notifications@codeplusacademy.in',
+  MANAGE_SERVICE_KEY: '',
+  WEBHOOK_SERVICE_KEY: '',
 };
 
 const missing = REQUIRED_VARS.filter(key => !process.env[key]);

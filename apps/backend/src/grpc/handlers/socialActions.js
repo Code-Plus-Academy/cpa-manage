@@ -400,4 +400,14 @@ const socialActionsHandlers = {
   },
 };
 
-module.exports = socialActionsHandlers;
+module.exports = {
+  ...socialActionsHandlers,
+  // PascalCase aliases to match proto definition when keepCase: true
+  CreateTicket: socialActionsHandlers.createTicket,
+  GetUserStanding: socialActionsHandlers.getUserStanding,
+  ReportContent: socialActionsHandlers.reportContent,
+  GetMyReports: socialActionsHandlers.getMyReports,
+  GetCaseDetails: socialActionsHandlers.getCaseDetails,
+  FileAppeal: socialActionsHandlers.fileAppeal,
+  CreateInstitutionClaim: socialActionsHandlers.createInstitutionClaim,
+};

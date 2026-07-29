@@ -68,10 +68,20 @@ export default function AdminDashboard() {
       credentials: 'include',
     });
     if (res.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('cpa_admin_token');
+      try {
+        const cloned = res.clone();
+        const errBody = await cloned.json();
+        // Only clear session if the server explicitly says session expired
+        if (errBody?.error?.code === 'SESSION_EXPIRED' || errBody?.error?.code === 'UNAUTHENTICATED') {
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('cpa_admin_token');
+          }
+          setAdminUser(null);
+        }
+      } catch (parseErr) {
+        // If we can't parse the error body, don't destroy the session (could be a network blip)
+        console.warn('[apiFetch] 401 received but could not parse error body — keeping session');
       }
-      setAdminUser(null);
     }
     return res;
   };
@@ -86,17 +96,32 @@ export default function AdminDashboard() {
     }
   }, [adminUser, activeTab, statusFilter, categoryFilter, currentPage]);
 
-  const checkAuthStatus = async () => {
+  const checkAuthStatus = async (retryCount = 0) => {
     try {
       const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
+      } else if (res.status === 401 && retryCount === 0) {
+        // On first 401, wait 3s and retry once (Render cold start can cause transient 401s)
+        const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
+        if (token) {
+          console.info('[Auth] Initial auth check failed, retrying in 3s (possible cold start)...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          return checkAuthStatus(1);
+        }
       }
     } catch (err) {
       console.error('Auth check failed:', err);
+      if (retryCount === 0) {
+        // Network error on first try — retry once after delay
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return checkAuthStatus(1);
+      }
     } finally {
-      setLoading(false);
+      if (retryCount === 0 || retryCount === 1) {
+        setLoading(false);
+      }
     }
   };
 
@@ -224,6 +249,8 @@ export default function AdminDashboard() {
     } catch (err) {
       alert('Failed to process action');
     }
+  };
+
   const handleCreateAdminWorker = async (e) => {
     e.preventDefault();
     setAdminSubmitError(null);

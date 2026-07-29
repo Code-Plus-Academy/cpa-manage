@@ -18,6 +18,7 @@ const institutionClaimsRoutes = require('./routes/institutionClaims');
 const emailRoutes = require('./routes/email');
 const systemStatusRoutes = require('./routes/systemStatus');
 const auditLogRoutes = require('./routes/auditLog');
+const webhookRoutes = require('./routes/webhook');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -49,6 +50,7 @@ app.use(cookieParser());
 
 // ─── Public routes ─────────────────────────────────────────────────────────────
 app.use('/healthz', healthzRoutes);
+app.use('/webhook', webhookRoutes);
 
 // ─── Auth routes (login/logout BEFORE requireAdminAuth) ────────────────────────
 app.use('/admin/auth', authRoutes);

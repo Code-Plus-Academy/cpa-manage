@@ -18,7 +18,11 @@ function getAllowedTicketTypes(adminUser) {
   const perms = adminUser.permissions || [];
 
   if (perms.some(p => p.startsWith('support.'))) {
-    allowedTypes.push('general-support', 'harassment', 'privacy-access', 'privacy-correction', 'privacy-erasure');
+    allowedTypes.push(
+      'general-support', 'general', 'support', 'harassment', 'privacy-access',
+      'privacy-correction', 'privacy-erasure', 'bug', 'feedback', 'abuse',
+      'spam', 'other', 'inquiry', 'account', 'content'
+    );
   }
   if (perms.some(p => p.startsWith('claims.copyright.'))) {
     allowedTypes.push('copyright');

@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { query, getClient } = require('../config/db');
 const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
