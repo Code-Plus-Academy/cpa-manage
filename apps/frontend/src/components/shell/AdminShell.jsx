@@ -250,13 +250,19 @@ export default function AdminShell({
               </div>
               <button
                 onClick={async () => {
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('cpa_admin_token');
+                  }
                   if (onLogout) {
                     onLogout();
                     return;
                   }
                   try {
                     const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
-                    await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', credentials: 'include' });
+                    const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
+                    const headers = {};
+                    if (token) headers['Authorization'] = `Bearer ${token}`;
+                    await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', headers, credentials: 'include' });
                     router.push('/');
                     router.refresh();
                   } catch (err) {

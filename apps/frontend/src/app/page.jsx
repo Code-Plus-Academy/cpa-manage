@@ -48,6 +48,26 @@ export default function AdminDashboard() {
 
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
+  const apiFetch = async (path, options = {}) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
+    const headers = { ...options.headers };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
+    if (res.status === 401) {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cpa_admin_token');
+      }
+      setAdminUser(null);
+    }
+    return res;
+  };
+
   useEffect(() => {
     checkAuthStatus();
   }, []);
@@ -60,7 +80,7 @@ export default function AdminDashboard() {
 
   const checkAuthStatus = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
@@ -91,6 +111,9 @@ export default function AdminDashboard() {
       if (!res.ok) {
         throw new Error(data.message || 'Authentication failed');
       }
+      if (data.token) {
+        localStorage.setItem('cpa_admin_token', data.token);
+      }
       setAdminUser(data.admin_user);
     } catch (err) {
       setError(err.message);
@@ -101,11 +124,15 @@ export default function AdminDashboard() {
 
   const handleLogout = async () => {
     try {
-      await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', credentials: 'include' });
-      setAdminUser(null);
-      setSelectedItem(null);
+      await apiFetch('/admin/auth/logout', { method: 'POST' });
     } catch (err) {
       console.error('Logout error:', err);
+    } finally {
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('cpa_admin_token');
+      }
+      setAdminUser(null);
+      setSelectedItem(null);
     }
   };
 
@@ -117,43 +144,43 @@ export default function AdminDashboard() {
         if (statusFilter !== 'all') queryParams.append('status', statusFilter);
         queryParams.append('page', currentPage);
 
-        const res = await fetch(`${apiUrl}/admin/cases?${queryParams}`, { credentials: 'include' });
+        const res = await apiFetch(`/admin/cases?${queryParams}`);
         if (res.ok) {
           const data = await res.json();
           setTickets(data.cases || []);
         }
       } else if (tab === 'copyright') {
-        const res = await fetch(`${apiUrl}/admin/cases?type=copyright`, { credentials: 'include' });
+        const res = await apiFetch('/admin/cases?type=copyright');
         if (res.ok) {
           const data = await res.json();
           setCopyrightClaims(data.cases || []);
         }
       } else if (tab === 'institutions') {
-        const res = await fetch(`${apiUrl}/admin/institution-claims`, { credentials: 'include' });
+        const res = await apiFetch('/admin/institution-claims');
         if (res.ok) {
           const data = await res.json();
           setInstitutionClaims(data.claims || []);
         }
       } else if (tab === 'reclaim') {
-        const res = await fetch(`${apiUrl}/admin/cases?type=ownership_transfer`, { credentials: 'include' });
+        const res = await apiFetch('/admin/cases?type=ownership_transfer');
         if (res.ok) {
           const data = await res.json();
           setReclaimClaims(data.cases || []);
         }
       } else if (tab === 'users') {
-        const res = await fetch(`${apiUrl}/admin/users/reports`, { credentials: 'include' });
+        const res = await apiFetch('/admin/users/reports');
         if (res.ok) {
           const data = await res.json();
           setUsers(data.reports || []);
         }
       } else if (tab === 'audit') {
-        const res = await fetch(`${apiUrl}/admin/audit-log`, { credentials: 'include' });
+        const res = await apiFetch('/admin/audit-log');
         if (res.ok) {
           const data = await res.json();
           setAuditLogs(data.logs || []);
         }
       } else if (tab === 'admins' && adminUser?.is_root) {
-        const res = await fetch(`${apiUrl}/admin/admins`, { credentials: 'include' });
+        const res = await apiFetch('/admin/admins');
         if (res.ok) {
           const data = await res.json();
           setAdminsList(data.admins || []);
@@ -172,10 +199,9 @@ export default function AdminDashboard() {
       return;
     }
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticketId}/action`, {
+      const res = await apiFetch(`/admin/cases/${ticketId}/action`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ action_type: actionType, reason: actionReason, issue_strike: strike }),
       });
       if (res.ok) {

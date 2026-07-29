@@ -108,6 +108,7 @@ router.post('/login', async (req, res, next) => {
     });
 
     res.json({
+      token: rawToken,
       admin_user: {
         id: admin.id,
         email: admin.email,
@@ -124,7 +125,14 @@ router.post('/login', async (req, res, next) => {
 // ─── GET /admin/auth/me ────────────────────────────────────────────────────────
 router.get('/me', async (req, res, next) => {
   try {
-    const token = req.cookies?.[COOKIE_NAME];
+    let token = req.cookies?.[COOKIE_NAME];
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      token = req.headers.authorization.slice(7).trim();
+    }
+    if (!token && req.headers['x-admin-token']) {
+      token = req.headers['x-admin-token'];
+    }
+
     if (!token) {
       return next(new AppError('SESSION_EXPIRED', 401));
     }

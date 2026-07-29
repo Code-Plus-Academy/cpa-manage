@@ -20,7 +20,14 @@ async function requireAdminAuth(req, res, next) {
     return next();
   }
 
-  const token = req.cookies?.[COOKIE_NAME];
+  let token = req.cookies?.[COOKIE_NAME];
+  if (!token && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+    token = req.headers.authorization.slice(7).trim();
+  }
+  if (!token && req.headers['x-admin-token']) {
+    token = req.headers['x-admin-token'];
+  }
+
   if (!token) {
     return next(new AppError('UNAUTHENTICATED', 401));
   }
