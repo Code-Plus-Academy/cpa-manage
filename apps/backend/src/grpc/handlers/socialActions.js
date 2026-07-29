@@ -5,6 +5,14 @@
 const grpc = require('@grpc/grpc-js');
 const { query } = require('../../config/db');
 
+/** Helper to validate and format UUID values for PostgreSQL */
+function parseUuid(val) {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+}
+
 function formatTicket(row) {
   if (!row) return null;
   return {
@@ -71,6 +79,9 @@ const socialActionsHandlers = {
       // Calculate SLA: 15 days for private_complainant
       const slaResolveBy = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
 
+      const safeUserId = parseUuid(user_id);
+      const safeContentId = parseUuid(content_id);
+
       const { rows } = await query(
         `INSERT INTO support_tickets (
           user_id, reporter_email, type, case_source, category, description,
@@ -78,14 +89,14 @@ const socialActionsHandlers = {
         ) VALUES ($1, $2, $3, 'private_complainant', $4, $5, $6, $7, $8, $9, 'open', $10)
         RETURNING id, sla_resolve_by`,
         [
-          user_id || null,
+          safeUserId,
           reporter_email || null,
           type,
           category,
           description,
           evidence_urls || [],
           content_type || null,
-          content_id || null,
+          safeContentId,
           source_surface || null,
           slaResolveBy,
         ]
@@ -109,7 +120,9 @@ const socialActionsHandlers = {
   async getUserStanding(call, callback) {
     try {
       const { user_id } = call.request || {};
-      if (!user_id) {
+      const safeUserId = parseUuid(user_id);
+
+      if (!safeUserId) {
         return callback(null, {
           active_strikes: 0,
           suspension_status: 'none',
@@ -120,14 +133,14 @@ const socialActionsHandlers = {
       // Count active strikes
       const strikeRes = await query(
         `SELECT COUNT(*)::int as count FROM strikes WHERE user_id::text = $1 AND is_active = true AND expires_at > NOW()`,
-        [user_id]
+        [safeUserId]
       );
       const activeStrikes = strikeRes.rows[0]?.count || 0;
 
       // Check suspension status
       const suspRes = await query(
         `SELECT status, suspended_until FROM suspensions WHERE user_id::text = $1 AND status IN ('suspended', 'banned') ORDER BY created_at DESC LIMIT 1`,
-        [user_id]
+        [safeUserId]
       );
 
       let suspensionStatus = 'none';
@@ -166,6 +179,8 @@ const socialActionsHandlers = {
 
       const now = new Date();
       const slaResolveBy = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
+      const safeUserId = parseUuid(reporter_user_id);
+      const safeContentId = parseUuid(content_id);
 
       const { rows } = await query(
         `INSERT INTO support_tickets (
@@ -174,10 +189,10 @@ const socialActionsHandlers = {
         ) VALUES ($1, 'harassment', 'private_complainant', 'User Content Report', $2, $3, $4, $5, 'open', $6)
         RETURNING id`,
         [
-          reporter_user_id || null,
+          safeUserId,
           reason || 'Flagged content report',
           content_type,
-          content_id,
+          safeContentId,
           source_surface || 'feed',
           slaResolveBy,
         ]
@@ -198,16 +213,14 @@ const socialActionsHandlers = {
   async getMyReports(call, callback) {
     try {
       const { user_id } = call.request || {};
-      if (!user_id) {
-        return callback({
-          code: grpc.status.INVALID_ARGUMENT,
-          message: 'user_id is required',
-        });
+      const safeUserId = parseUuid(user_id);
+      if (!safeUserId) {
+        return callback(null, { tickets: [] });
       }
 
       const { rows } = await query(
         `SELECT * FROM support_tickets WHERE user_id::text = $1 ORDER BY created_at DESC`,
-        [user_id]
+        [safeUserId]
       );
 
       const tickets = rows.map(formatTicket);
@@ -244,7 +257,8 @@ const socialActionsHandlers = {
       }
 
       const ticket = rows[0];
-      if (user_id && ticket.user_id && String(ticket.user_id) !== String(user_id)) {
+      const safeUserId = parseUuid(user_id);
+      if (safeUserId && ticket.user_id && String(ticket.user_id) !== String(safeUserId)) {
         return callback({
           code: grpc.status.NOT_FOUND,
           message: 'Case/Ticket not found',
@@ -278,10 +292,11 @@ const socialActionsHandlers = {
   async fileAppeal(call, callback) {
     try {
       const { ticket_id, user_id, reason, evidence_urls } = call.request || {};
-      if (!ticket_id || !user_id || !reason) {
+      const safeUserId = parseUuid(user_id);
+      if (!ticket_id || !safeUserId || !reason) {
         return callback({
           code: grpc.status.INVALID_ARGUMENT,
-          message: 'ticket_id, user_id, and reason are required',
+          message: 'ticket_id, valid user_id (UUID), and reason are required',
         });
       }
 
@@ -296,7 +311,7 @@ const socialActionsHandlers = {
       // Check if appeal already exists for this ticket and user
       const existingAppeal = await query(
         `SELECT * FROM appeals WHERE ticket_id::text = $1 AND user_id::text = $2`,
-        [ticket_id, user_id]
+        [ticket_id, safeUserId]
       );
 
       if (existingAppeal.rows.length > 0) {
@@ -310,7 +325,7 @@ const socialActionsHandlers = {
         `INSERT INTO appeals (ticket_id, user_id, reason, status)
          VALUES ($1, $2, $3, 'pending')
          RETURNING id, status`,
-        [ticket_id, user_id, reason]
+        [ticket_id, safeUserId, reason]
       );
 
       callback(null, {
@@ -342,10 +357,12 @@ const socialActionsHandlers = {
         proof_documents,
       } = call.request || {};
 
-      if (!institution_id || !claimant_user_id || !official_email) {
+      const safeUserId = parseUuid(claimant_user_id);
+
+      if (!institution_id || !official_email) {
         return callback({
           code: grpc.status.INVALID_ARGUMENT,
-          message: 'institution_id, claimant_user_id, and official_email are required',
+          message: 'institution_id and official_email are required',
         });
       }
 
@@ -356,7 +373,7 @@ const socialActionsHandlers = {
         RETURNING id, status`,
         [
           institution_id,
-          claimant_user_id,
+          safeUserId,
           claimant_role || null,
           official_email,
           proof_documents || [],
