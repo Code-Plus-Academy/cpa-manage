@@ -9,8 +9,8 @@ const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 
-// ─── GET /admin/users ──────────────────────────────────────────────────────────
-router.get('/', requirePermission('users.reports.view'), async (req, res, next) => {
+// ─── GET /admin/users & /admin/users/reports ─────────────────────────────────────
+router.get(['/', '/reports'], requirePermission('users.reports.view'), async (req, res, next) => {
   try {
     const { rows: strikes } = await query(
       `SELECT user_id, COUNT(*)::int as strike_count, MAX(created_at) as last_strike_at

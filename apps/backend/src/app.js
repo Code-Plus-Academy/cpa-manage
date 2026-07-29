@@ -17,6 +17,7 @@ const usersRoutes = require('./routes/users');
 const institutionClaimsRoutes = require('./routes/institutionClaims');
 const emailRoutes = require('./routes/email');
 const systemStatusRoutes = require('./routes/systemStatus');
+const auditLogRoutes = require('./routes/auditLog');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -60,6 +61,8 @@ app.use('/admin/cases', casesRoutes);
 app.use('/admin/admins', adminsRoutes);
 app.use('/admin/users', usersRoutes);
 app.use('/admin/claims/institution', institutionClaimsRoutes);
+app.use('/admin/institution-claims', institutionClaimsRoutes);
+app.use('/admin/audit-log', auditLogRoutes);
 app.use('/admin/email', emailRoutes);
 app.use('/admin/system-status', systemStatusRoutes);
 

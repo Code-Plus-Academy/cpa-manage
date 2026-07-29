@@ -46,6 +46,14 @@ export default function AdminDashboard() {
   const [actionReason, setActionReason] = useState('');
   const [confirmModal, setConfirmModal] = useState(null); // { title, description, actionType, onConfirm }
 
+  // Create Worker Admin state
+  const [showCreateAdminModal, setShowCreateAdminModal] = useState(false);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminName, setNewAdminName] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
+  const [adminSubmitError, setAdminSubmitError] = useState(null);
+  const [adminSubmitting, setAdminSubmitting] = useState(false);
+
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   const apiFetch = async (path, options = {}) => {
@@ -215,6 +223,35 @@ export default function AdminDashboard() {
       }
     } catch (err) {
       alert('Failed to process action');
+    }
+  const handleCreateAdminWorker = async (e) => {
+    e.preventDefault();
+    setAdminSubmitError(null);
+    setAdminSubmitting(true);
+    try {
+      const res = await apiFetch('/admin/admins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newAdminEmail,
+          display_name: newAdminName,
+          password: newAdminPassword,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Failed to create worker admin');
+      }
+      setShowCreateAdminModal(false);
+      setNewAdminEmail('');
+      setNewAdminName('');
+      setNewAdminPassword('');
+      loadTabData('admins');
+    } catch (err) {
+      setAdminSubmitError(err.message);
+    } finally {
+      setAdminSubmitting(false);
     }
   };
 
@@ -519,7 +556,10 @@ export default function AdminDashboard() {
             </div>
 
             {activeTab === 'admins' && adminUser?.is_root && (
-              <button style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, color: '#FFFFFF', fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer' }}>
+              <button
+                onClick={() => setShowCreateAdminModal(true)}
+                style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, color: '#FFFFFF', fontWeight: '600', fontSize: '13px', border: 'none', cursor: 'pointer' }}
+              >
                 + Create Admin Worker
               </button>
             )}
@@ -551,58 +591,253 @@ export default function AdminDashboard() {
             ) : (
               <table className="data-table">
                 <thead>
-                  <tr>
-                    <th>ID / Ref</th>
-                    <th>Category / Type</th>
-                    <th>Reported Target</th>
-                    <th>Status</th>
-                    <th>SLA Deadline</th>
-                    <th style={{ textAlign: 'right' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(activeTab === 'tickets' ? tickets : activeTab === 'copyright' ? copyrightClaims : activeTab === 'reclaim' ? reclaimClaims : []).length === 0 ? (
+                  {activeTab === 'institutions' ? (
                     <tr>
-                      <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
-                        <Clock size={32} style={{ marginBottom: '12px', color: tokens.colors.borderSubtle }} />
-                        <div style={{ fontSize: '14px', fontWeight: '600', color: tokens.colors.textPrimary }}>No cases found</div>
-                        <span style={{ fontSize: '12px' }}>There are currently no items matching your criteria.</span>
-                      </td>
+                      <th>Claim ID</th>
+                      <th>Institution / University</th>
+                      <th>Claimant Email</th>
+                      <th>Status</th>
+                      <th>Submitted Date</th>
+                    </tr>
+                  ) : activeTab === 'users' ? (
+                    <tr>
+                      <th>User ID</th>
+                      <th>Moderation Status</th>
+                      <th>Strikes Issued</th>
+                      <th>Reports Filed against</th>
+                      <th>Last Action</th>
+                    </tr>
+                  ) : activeTab === 'audit' ? (
+                    <tr>
+                      <th>Log ID</th>
+                      <th>Actor (Admin)</th>
+                      <th>Module / Action</th>
+                      <th>Target</th>
+                      <th>Reason / Details</th>
+                      <th>Timestamp</th>
+                    </tr>
+                  ) : activeTab === 'admins' ? (
+                    <tr>
+                      <th>Admin ID</th>
+                      <th>Display Name</th>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Permissions</th>
                     </tr>
                   ) : (
-                    (activeTab === 'tickets' ? tickets : activeTab === 'copyright' ? copyrightClaims : reclaimClaims).map((t) => (
-                      <tr key={t.id} onClick={() => setSelectedItem(t)} style={{ cursor: 'pointer' }}>
-                        <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.primary }}>
-                          {t.id.slice(0, 8)}...
-                        </td>
-                        <td>
-                          <div style={{ fontWeight: '600' }}>{t.category || t.type}</div>
-                          <span style={{ fontSize: '11px', color: tokens.colors.textMuted }}>{t.case_source}</span>
-                        </td>
-                        <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.textSecondary }}>
-                          {t.content_type ? `${t.content_type.toUpperCase()}:${t.content_id?.slice(0,6)}` : 'N/A'}
-                        </td>
-                        <td>
-                          <StatusPill status={t.status} />
-                        </td>
-                        <td style={{ fontSize: '12px', color: new Date(t.sla_resolve_by) < new Date() ? '#EF4444' : tokens.colors.textSecondary }}>
-                          {t.sla_resolve_by ? new Date(t.sla_resolve_by).toLocaleDateString() : 'N/A'}
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedItem(t); }}
-                            style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer', padding: '4px' }}
-                          >
-                            <MoreVertical size={16} />
-                          </button>
+                    <tr>
+                      <th>ID / Ref</th>
+                      <th>Category / Type</th>
+                      <th>Reported Target</th>
+                      <th>Status</th>
+                      <th>SLA Deadline</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  )}
+                </thead>
+                <tbody>
+                  {activeTab === 'institutions' ? (
+                    institutionClaims.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                          No institution verification claims found.
                         </td>
                       </tr>
-                    ))
+                    ) : (
+                      institutionClaims.map((c) => (
+                        <tr key={c.id}>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.primary }}>{c.id.slice(0, 8)}...</td>
+                          <td style={{ fontWeight: '600' }}>{c.institution_name || c.institution_id || 'N/A'}</td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textSecondary }}>{c.claimant_email}</td>
+                          <td><StatusPill status={c.status} /></td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textMuted }}>{new Date(c.created_at).toLocaleDateString()}</td>
+                        </tr>
+                      ))
+                    )
+                  ) : activeTab === 'users' ? (
+                    users.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                          No user moderation records found.
+                        </td>
+                      </tr>
+                    ) : (
+                      users.map((u) => (
+                        <tr key={u.user_id}>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.primary }}>{u.user_id.slice(0, 8)}...</td>
+                          <td><StatusPill status={u.moderation_status || 'active'} /></td>
+                          <td style={{ fontWeight: '600', color: u.strike_count > 0 ? '#EF4444' : tokens.colors.textPrimary }}>{u.strike_count} strike(s)</td>
+                          <td>{u.report_count} report(s)</td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textMuted }}>{u.last_action_at ? new Date(u.last_action_at).toLocaleDateString() : 'N/A'}</td>
+                        </tr>
+                      ))
+                    )
+                  ) : activeTab === 'audit' ? (
+                    auditLogs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                          No audit log entries recorded.
+                        </td>
+                      </tr>
+                    ) : (
+                      auditLogs.map((l) => (
+                        <tr key={l.id}>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px', color: tokens.colors.textMuted }}>{l.id.slice(0, 8)}...</td>
+                          <td style={{ fontWeight: '600', fontSize: '12px' }}>{l.actor_name || l.actor_email || 'Root System'}</td>
+                          <td>
+                            <span style={{ fontSize: '11px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(59,130,246,0.15)', color: '#60A5FA', fontWeight: '600' }}>
+                              {l.module}.{l.action}
+                            </span>
+                          </td>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>{l.target_type ? `${l.target_type}:${l.target_id?.slice(0,6)}` : 'N/A'}</td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textSecondary }}>{l.reason || 'N/A'}</td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textMuted }}>{new Date(l.created_at).toLocaleString()}</td>
+                        </tr>
+                      ))
+                    )
+                  ) : activeTab === 'admins' ? (
+                    adminsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                          No admin users found.
+                        </td>
+                      </tr>
+                    ) : (
+                      adminsList.map((a) => (
+                        <tr key={a.id}>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.primary }}>{a.id.slice(0, 8)}...</td>
+                          <td style={{ fontWeight: '600' }}>{a.display_name}</td>
+                          <td style={{ fontSize: '12px', color: tokens.colors.textSecondary }}>{a.email}</td>
+                          <td>
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '12px', backgroundColor: a.is_root ? 'rgba(245,158,11,0.2)' : 'rgba(59,130,246,0.2)', color: a.is_root ? '#FBBF24' : '#60A5FA', fontWeight: '700' }}>
+                              {a.is_root ? 'ROOT SUPERADMIN' : 'WORKER ADMIN'}
+                            </span>
+                          </td>
+                          <td><StatusPill status={a.status} /></td>
+                          <td style={{ fontSize: '11px', color: tokens.colors.textMuted }}>
+                            {a.permissions?.includes('*') ? 'All Permissions (*)' : `${a.permissions?.length || 0} granted`}
+                          </td>
+                        </tr>
+                      ))
+                    )
+                  ) : (
+                    (activeTab === 'tickets' ? tickets : activeTab === 'copyright' ? copyrightClaims : reclaimClaims).length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                          <Clock size={32} style={{ marginBottom: '12px', color: tokens.colors.borderSubtle }} />
+                          <div style={{ fontSize: '14px', fontWeight: '600', color: tokens.colors.textPrimary }}>No cases found</div>
+                          <span style={{ fontSize: '12px' }}>There are currently no items matching your criteria.</span>
+                        </td>
+                      </tr>
+                    ) : (
+                      (activeTab === 'tickets' ? tickets : activeTab === 'copyright' ? copyrightClaims : reclaimClaims).map((t) => (
+                        <tr key={t.id} onClick={() => setSelectedItem(t)} style={{ cursor: 'pointer' }}>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.primary }}>
+                            {t.id.slice(0, 8)}...
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: '600' }}>{t.category || t.type}</div>
+                            <span style={{ fontSize: '11px', color: tokens.colors.textMuted }}>{t.case_source}</span>
+                          </td>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '12px', color: tokens.colors.textSecondary }}>
+                            {t.content_type ? `${t.content_type.toUpperCase()}:${t.content_id?.slice(0,6)}` : 'N/A'}
+                          </td>
+                          <td>
+                            <StatusPill status={t.status} />
+                          </td>
+                          <td style={{ fontSize: '12px', color: new Date(t.sla_resolve_by) < new Date() ? '#EF4444' : tokens.colors.textSecondary }}>
+                            {t.sla_resolve_by ? new Date(t.sla_resolve_by).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedItem(t); }}
+                              style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer', padding: '4px' }}
+                            >
+                              <MoreVertical size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )
                   )}
                 </tbody>
               </table>
             )}
           </div>
+
+          {/* CREATE WORKER ADMIN MODAL */}
+          {showCreateAdminModal && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+              <div style={{ maxWidth: '440px', width: '100%', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '6px' }}>Create Worker Admin</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textSecondary, marginBottom: '20px' }}>
+                  Create a new staff admin account. You can assign granular permissions after creation.
+                </p>
+
+                {adminSubmitError && (
+                  <div style={{ backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#F87171', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                    {adminSubmitError}
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateAdminWorker} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textSecondary, display: 'block', marginBottom: '4px' }}>Display Name</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Rahul Sharma"
+                      value={newAdminName}
+                      onChange={(e) => setNewAdminName(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textSecondary, display: 'block', marginBottom: '4px' }}>Email Address</label>
+                    <input
+                      type="email"
+                      required
+                      placeholder="e.g. rahul@codeplusacademy.in"
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textSecondary, display: 'block', marginBottom: '4px' }}>Temporary Password</label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="Min 8 chars"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateAdminModal(false)}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textSecondary, fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={adminSubmitting}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      {adminSubmitting ? 'Creating...' : 'Create Account'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </AdminShell>
