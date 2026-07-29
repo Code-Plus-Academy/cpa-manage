@@ -9,6 +9,52 @@ const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 
+// ─── GET /admin/users ──────────────────────────────────────────────────────────
+router.get('/', requirePermission('users.reports.view'), async (req, res, next) => {
+  try {
+    const { rows: strikes } = await query(
+      `SELECT user_id, COUNT(*)::int as strike_count, MAX(created_at) as last_strike_at
+       FROM strikes GROUP BY user_id`
+    );
+
+    const { rows: suspensions } = await query(
+      `SELECT DISTINCT ON (user_id) user_id, status, reason, suspended_until, created_at
+       FROM suspensions ORDER BY user_id, created_at DESC`
+    );
+
+    const { rows: reports } = await query(
+      `SELECT user_id, COUNT(*)::int as report_count
+       FROM support_tickets WHERE type IN ('harassment', 'user_report', 'impersonation')
+       GROUP BY user_id`
+    );
+
+    const userMap = {};
+
+    strikes.forEach(s => {
+      if (!userMap[s.user_id]) userMap[s.user_id] = { user_id: s.user_id, strike_count: 0, moderation_status: 'active', report_count: 0, last_action_at: null };
+      userMap[s.user_id].strike_count = s.strike_count;
+      userMap[s.user_id].last_action_at = s.last_strike_at;
+    });
+
+    suspensions.forEach(s => {
+      if (!userMap[s.user_id]) userMap[s.user_id] = { user_id: s.user_id, strike_count: 0, moderation_status: 'active', report_count: 0, last_action_at: null };
+      userMap[s.user_id].moderation_status = s.status;
+      userMap[s.user_id].suspended_until = s.suspended_until;
+      userMap[s.user_id].suspension_reason = s.reason;
+    });
+
+    reports.forEach(r => {
+      if (!userMap[r.user_id]) userMap[r.user_id] = { user_id: r.user_id, strike_count: 0, moderation_status: 'active', report_count: 0, last_action_at: null };
+      userMap[r.user_id].report_count = r.report_count;
+    });
+
+    const userList = Object.values(userMap);
+    res.json({ users: userList });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── POST /admin/users/:id/strikes ──────────────────────────────────────────────
 router.post('/:id/strikes', requirePermission('users.strike'), async (req, res, next) => {
   const client = await getClient();

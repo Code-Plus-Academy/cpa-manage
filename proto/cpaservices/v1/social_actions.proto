@@ -6,6 +6,10 @@ service SocialActions {
   rpc CreateTicket (CreateTicketRequest) returns (CreateTicketResponse);
   rpc GetUserStanding (UserRef) returns (UserStanding);
   rpc ReportContent (ReportContentRequest) returns (ReportContentResponse);
+  rpc GetMyReports (GetMyReportsRequest) returns (GetMyReportsResponse);
+  rpc GetCaseDetails (GetCaseDetailsRequest) returns (GetCaseDetailsResponse);
+  rpc FileAppeal (FileAppealRequest) returns (FileAppealResponse);
+  rpc CreateInstitutionClaim (CreateInstitutionClaimRequest) returns (CreateInstitutionClaimResponse);
 }
 
 message UserRef {
@@ -45,4 +49,81 @@ message ReportContentRequest {
 
 message ReportContentResponse {
   string ticket_id = 1;
+}
+
+message TicketSummary {
+  string id = 1;
+  string user_id = 2;
+  string type = 3;
+  string category = 4;
+  string description = 5;
+  string content_type = 6;
+  string content_id = 7;
+  string source_surface = 8;
+  string status = 9;
+  string sla_resolve_by = 10;
+  string created_at = 11;
+  string updated_at = 12;
+}
+
+message GetMyReportsRequest {
+  string user_id = 1;
+}
+
+message GetMyReportsResponse {
+  repeated TicketSummary tickets = 1;
+}
+
+message TicketActionItem {
+  string id = 1;
+  string ticket_id = 2;
+  string action_type = 3;
+  string reason = 4;
+  bool issued_strike = 5;
+  string created_at = 6;
+}
+
+message AppealItem {
+  string id = 1;
+  string ticket_id = 2;
+  string user_id = 3;
+  string reason = 4;
+  string status = 5;
+  string created_at = 6;
+}
+
+message GetCaseDetailsRequest {
+  string ticket_id = 1;
+  string user_id = 2;
+}
+
+message GetCaseDetailsResponse {
+  TicketSummary ticket = 1;
+  repeated TicketActionItem actions = 2;
+  repeated AppealItem appeals = 3;
+}
+
+message FileAppealRequest {
+  string ticket_id = 1;
+  string user_id = 2;
+  string reason = 3;
+  repeated string evidence_urls = 4;
+}
+
+message FileAppealResponse {
+  string appeal_id = 1;
+  string status = 2;
+}
+
+message CreateInstitutionClaimRequest {
+  string institution_id = 1;
+  string claimant_user_id = 2;
+  string claimant_role = 3;
+  string official_email = 4;
+  repeated string proof_documents = 5;
+}
+
+message CreateInstitutionClaimResponse {
+  string claim_id = 1;
+  string status = 2;
 }

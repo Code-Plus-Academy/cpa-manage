@@ -33,5 +33,6 @@ INSERT INTO permissions (key, module, description) VALUES
   ('email.campaign.send',       'email',     'Send email campaigns'),
   ('email.analytics.view',      'email',     'View email analytics'),
   ('audit.view',                'audit',     'View the audit log'),
+  ('system.status.view',        'system',    'View system status'),
   ('admin.manage',              'admin',     'Manage admin accounts and permissions (root only)')
 ON CONFLICT (key) DO NOTHING;

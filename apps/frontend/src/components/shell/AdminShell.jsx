@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
   ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command
@@ -16,6 +17,7 @@ export default function AdminShell({
   slaAlertCount = 0,
   children
 }) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -59,6 +61,7 @@ export default function AdminShell({
       title: 'ADMINISTRATION',
       items: [
         { id: 'audit', label: 'Audit Log', icon: Activity, perm: 'audit.view' },
+        { id: 'system-status', label: 'System Status', icon: Activity, perm: 'system.status.view' },
         { id: 'admins', label: 'Admin Management', icon: Users, perm: 'admin.manage', rootOnly: true },
       ],
     },
@@ -149,10 +152,18 @@ export default function AdminShell({
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
 
+                  const handleNavClick = (id) => {
+                    if (onTabChange) {
+                      onTabChange(id);
+                    } else {
+                      router.push(`/${id}`);
+                    }
+                  };
+
                   return (
                     <button
                       key={item.id}
-                      onClick={() => onTabChange(item.id)}
+                      onClick={() => handleNavClick(item.id)}
                       title={collapsed ? item.label : undefined}
                       style={{
                         width: '100%',
@@ -238,7 +249,20 @@ export default function AdminShell({
                 </div>
               </div>
               <button
-                onClick={onLogout}
+                onClick={async () => {
+                  if (onLogout) {
+                    onLogout();
+                    return;
+                  }
+                  try {
+                    const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
+                    await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', credentials: 'include' });
+                    router.push('/');
+                    router.refresh();
+                  } catch (err) {
+                    console.error('Logout error:', err);
+                  }
+                }}
                 title="Logout"
                 style={{
                   background: 'none',

@@ -46,7 +46,7 @@ export default function AdminDashboard() {
   const [actionReason, setActionReason] = useState('');
   const [confirmModal, setConfirmModal] = useState(null); // { title, description, actionType, onConfirm }
 
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
+  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   useEffect(() => {
     checkAuthStatus();

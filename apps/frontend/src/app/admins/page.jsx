@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, ArrowLeft, ShieldCheck, Plus, Check } from 'lucide-react';
+import AdminShell from '../../components/shell/AdminShell';
 
 export default function AdminIAMPage() {
   const router = useRouter();
+  const [adminUser, setAdminUser] = useState(null);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -15,11 +17,24 @@ export default function AdminIAMPage() {
   const [password, setPassword] = useState('');
   const [creating, setCreating] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
+  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   useEffect(() => {
+    checkAuth();
     loadAdmins();
   }, []);
+
+  const checkAuth = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setAdminUser(data.admin_user);
+      }
+    } catch (err) {
+      console.error('Auth check failed:', err);
+    }
+  };
 
   const loadAdmins = async () => {
     try {
@@ -55,17 +70,18 @@ export default function AdminIAMPage() {
         loadAdmins();
       } else {
         const data = await res.json();
-        alert(data.error?.message || 'Failed to create worker admin.');
+        alert(data.error?.message || data.message || 'Failed to create worker admin.');
       }
     } catch (err) {
-      alert('Network error creating admin.');
+      alert(err.message || 'Network error creating admin.');
     } finally {
       setCreating(false);
     }
   };
 
   return (
-    <main style={{ minHeight: '100vh', padding: '2rem', maxWidth: 1100, margin: '0 auto', color: '#f8fafc' }}>
+    <AdminShell adminUser={adminUser} activeTab="admins" breadcrumb={['Administration', 'Admin Management']}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', color: '#f8fafc' }}>
       <button onClick={() => router.push('/')} className="btn-secondary" style={{ marginBottom: 20, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <ArrowLeft size={16} /> Back to Dashboard
       </button>
@@ -156,6 +172,7 @@ export default function AdminIAMPage() {
           </form>
         </div>
       </div>
-    </main>
+    </div>
+    </AdminShell>
   );
 }
