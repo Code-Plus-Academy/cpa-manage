@@ -41,7 +41,7 @@ async function requireAdminAuth(req, res, next) {
          a.id, a.email, a.display_name, a.is_root, a.status
        FROM admin_sessions s
        JOIN admin_users a ON a.id = s.admin_user_id
-       WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
+       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > NOW()`,
       [tokenHash]
     );
 

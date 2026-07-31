@@ -80,15 +80,28 @@ router.post('/login', async (req, res, next) => {
       }
     }
 
-    // Create session
+    // Create session with device/IP tracking & session_family_id
+    const UAParser = require('ua-parser-js');
+    const parser = new UAParser(req.headers['user-agent']);
+    const browser = parser.getBrowser();
+    const os = parser.getOS();
+    const deviceInfo = `${browser.name || 'Unknown Browser'} on ${os.name || 'Unknown OS'}`;
+    const ipAddress = req.ip || req.headers['x-forwarded-for'] || 'Unknown IP';
+    const location = 'Unknown Location';
+
     const rawToken = crypto.randomBytes(48).toString('hex');
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
     const expiresAt = new Date(Date.now() + SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000);
 
-    await query(
-      'INSERT INTO admin_sessions (admin_user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
-      [admin.id, tokenHash, expiresAt]
+    const { rows: sessionRows } = await query(
+      `INSERT INTO admin_sessions (admin_user_id, token_hash, device_info, ip_address, location, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [admin.id, tokenHash, deviceInfo, ipAddress, location, expiresAt]
     );
+
+    const sessionId = sessionRows[0].id;
+    await query('UPDATE admin_sessions SET session_family_id = $1 WHERE id = $1', [sessionId]);
 
     // Update last_login_at
     await query('UPDATE admin_users SET last_login_at = NOW() WHERE id = $1', [admin.id]);
