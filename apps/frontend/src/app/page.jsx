@@ -142,7 +142,7 @@ export default function AdminDashboard() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.message || 'Authentication failed');
+        throw new Error(data.error?.message || data.message || 'Authentication failed');
       }
       if (data.token) {
         localStorage.setItem('cpa_admin_token', data.token);

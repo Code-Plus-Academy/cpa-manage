@@ -49,7 +49,11 @@ export default function RootLoginPage() {
         return;
       }
 
-      router.push('/dashboard');
+      if (data.token) {
+        localStorage.setItem('cpa_admin_token', data.token);
+      }
+
+      router.push('/');
     } catch (err) {
       setError('Unable to connect to cpa-manage API.');
     } finally {

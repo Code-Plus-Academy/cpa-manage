@@ -34,14 +34,14 @@ router.post('/login', async (req, res, next) => {
       }));
     }
 
-    // Fetch admin user
+    // Fetch admin user (case-insensitive email search)
     const { rows } = await query(
-      'SELECT id, email, password_hash, display_name, is_root, status, totp_secret FROM admin_users WHERE email = $1',
+      'SELECT id, email, password_hash, display_name, is_root, status, totp_secret FROM admin_users WHERE LOWER(email) = LOWER($1)',
       [email.toLowerCase().trim()]
     );
 
     if (rows.length === 0) {
-      return next(new AppError('INVALID_CREDENTIALS', 401));
+      return next(new AppError('INVALID_CREDENTIALS', 401, null, 'Invalid email or password.'));
     }
 
     const admin = rows[0];
@@ -50,42 +50,58 @@ router.post('/login', async (req, res, next) => {
       return next(new AppError('UNAUTHENTICATED', 401, null, 'This admin account has been disabled.'));
     }
 
-    // Verify password hash (SHA-256 hex or bcrypt)
+    // Verify password hash (supports bcrypt $2a$, $2b$, $2y$, etc., or SHA-256 hex)
     let passwordMatches = false;
-    if (admin.password_hash.startsWith('$2a$') || admin.password_hash.startsWith('$2b$')) {
-      const bcrypt = require('bcryptjs');
-      passwordMatches = await bcrypt.compare(password, admin.password_hash);
+    if (admin.password_hash.startsWith('$2')) {
+      try {
+        const bcrypt = require('bcryptjs');
+        passwordMatches = await bcrypt.compare(password, admin.password_hash);
+      } catch (e) {
+        passwordMatches = false;
+      }
     } else {
       const hash = crypto.createHash('sha256').update(password).digest('hex');
       passwordMatches = (hash === admin.password_hash);
+      if (!passwordMatches) {
+        // Fallback check with bcrypt in case hash format is ambiguous
+        try {
+          const bcrypt = require('bcryptjs');
+          passwordMatches = await bcrypt.compare(password, admin.password_hash);
+        } catch (e) {}
+      }
     }
 
     if (!passwordMatches) {
-      return next(new AppError('INVALID_CREDENTIALS', 401));
+      return next(new AppError('INVALID_CREDENTIALS', 401, null, 'Invalid email or password.'));
     }
 
     // Check 2FA if enabled
-    if (admin.totp_secret) {
+    if (admin.totp_secret && admin.totp_secret.trim() !== '') {
       if (!totp_code) {
         return next(new AppError('TOTP_REQUIRED', 401, null, '2FA code required for login.'));
       }
       const verified = speakeasy.totp.verify({
-        secret: admin.totp_secret,
+        secret: admin.totp_secret.trim(),
         encoding: 'base32',
-        token: totp_code,
-        window: 1,
+        token: totp_code.trim(),
+        window: 2,
       });
       if (!verified) {
-        return next(new AppError('TOTP_INVALID', 401));
+        return next(new AppError('TOTP_INVALID', 401, null, 'Invalid or expired 2FA code.'));
       }
     }
 
     // Create session with device/IP tracking & session_family_id
-    const UAParser = require('ua-parser-js');
-    const parser = new UAParser(req.headers['user-agent']);
-    const browser = parser.getBrowser();
-    const os = parser.getOS();
-    const deviceInfo = `${browser.name || 'Unknown Browser'} on ${os.name || 'Unknown OS'}`;
+    let deviceInfo = 'Unknown Device';
+    try {
+      const UAParser = require('ua-parser-js');
+      const parser = new UAParser(req.headers['user-agent']);
+      const browser = parser.getBrowser();
+      const os = parser.getOS();
+      deviceInfo = `${browser.name || 'Unknown Browser'} on ${os.name || 'Unknown OS'}`;
+    } catch (e) {
+      deviceInfo = (req.headers['user-agent'] || 'Unknown Device').slice(0, 150);
+    }
     const ipAddress = req.ip || req.headers['x-forwarded-for'] || 'Unknown IP';
     const location = 'Unknown Location';
 
