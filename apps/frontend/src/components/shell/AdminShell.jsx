@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
-  ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command
+  ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command, Briefcase
 } from 'lucide-react';
 import { tokens } from '../../app/theme/tokens';
 
@@ -37,6 +37,12 @@ export default function AdminShell({
         { id: 'copyright', label: 'Copyright Claims', icon: Scale, perm: 'claims.copyright.view' },
         { id: 'institutions', label: 'Institution Claims', icon: Building2, perm: 'claims.institution.view' },
         { id: 'reclaim', label: 'Content Reclaim Claims', icon: FileText, perm: 'claims.reclaim.view' },
+      ],
+    },
+    {
+      title: 'HIRING & RECRUITMENT',
+      items: [
+        { id: 'hiring', label: 'Careers & Hiring', icon: Briefcase, perm: 'hiring.view' },
       ],
     },
     {
