@@ -24,24 +24,28 @@ const hiringRoutes = require('./routes/hiring');
 const app = express();
 app.set('trust proxy', 1);
 
-// ─── Security ──────────────────────────────────────────────────────────────────
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    const allowedPatterns = [
-      /^http:\/\/localhost:\d+$/,
-      /^https:\/\/manage\.codeplusacademy\.in$/,
-      /^https:\/\/.*\.codeplusacademy\.in$/,
-      /^https:\/\/.*\.pages\.dev$/,
-    ];
-    if (allowedPatterns.some(p => p.test(origin))) {
-      return callback(null, true);
-    } else {
-      return callback(null, false);
-    }
-  },
-  credentials: true,
-}));
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && (
+    origin === 'https://www.codeplusacademy.in' ||
+    origin === 'https://codeplusacademy.in' ||
+    origin === 'https://manage.codeplusacademy.in' ||
+    origin.endsWith('.codeplusacademy.in') ||
+    origin.endsWith('.vercel.app') ||
+    origin.endsWith('.pages.dev') ||
+    origin.startsWith('http://localhost:') ||
+    origin.startsWith('http://127.0.0.1:')
+  )) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+  }
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 app.use(helmet());
 
 // ─── Logging & Parsing ─────────────────────────────────────────────────────────
