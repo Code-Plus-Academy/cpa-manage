@@ -144,6 +144,30 @@ async function updatePosition(call, callback) {
   }
 }
 
+async function duplicatePosition(call, callback) {
+  try {
+    const { position_id } = call.request;
+    const origRes = await pool.query('SELECT * FROM hiring_positions WHERE id = $1', [position_id]);
+    if (origRes.rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Position not found' });
+    }
+    const orig = origRes.rows[0];
+    const dupRes = await pool.query(
+      `INSERT INTO hiring_positions (
+        title, department, type, status, description, openings, location, requirements, responsibilities, salary_range
+       ) VALUES ($1, $2, $3, 'draft', $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        `${orig.title} (Copy)`, orig.department, orig.type, orig.description,
+        orig.openings, orig.location, orig.requirements, orig.responsibilities, orig.salary_range
+      ]
+    );
+    callback(null, mapPosition(dupRes.rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
 async function submitApplication(call, callback) {
   try {
     const { candidate_id, position_id, resume_url, candidate_name, candidate_email, candidate_phone } = call.request;
@@ -256,6 +280,28 @@ async function updateApplicationStatus(call, callback) {
   }
 }
 
+async function addApplicationNote(call, callback) {
+  try {
+    const { application_id, admin_id, admin_name, note } = call.request;
+    const { rows } = await pool.query(
+      `INSERT INTO hiring_application_notes (application_id, admin_id, admin_name, note)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [application_id, admin_id || null, admin_name || 'Admin', note]
+    );
+    const r = rows[0];
+    callback(null, {
+      id: r.id,
+      application_id: r.application_id,
+      admin_id: r.admin_id || '',
+      admin_name: r.admin_name || 'Admin',
+      note: r.note,
+      created_at: new Date(r.created_at).toISOString()
+    });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
 async function sendMessage(call, callback) {
   try {
     const { application_id, sender_role, sender_id, body } = call.request;
@@ -362,11 +408,13 @@ module.exports = {
   getPosition,
   createPosition,
   updatePosition,
+  duplicatePosition,
   submitApplication,
   getApplicationStatus,
   listMyApplications,
   listAllApplications,
   updateApplicationStatus,
+  addApplicationNote,
   sendMessage,
   getMessageHistory,
   subscribeMessages,
