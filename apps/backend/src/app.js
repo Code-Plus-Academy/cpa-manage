@@ -19,6 +19,7 @@ const emailRoutes = require('./routes/email');
 const systemStatusRoutes = require('./routes/systemStatus');
 const auditLogRoutes = require('./routes/auditLog');
 const webhookRoutes = require('./routes/webhook');
+const hiringRoutes = require('./routes/hiring');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -67,6 +68,7 @@ app.use('/admin/institution-claims', institutionClaimsRoutes);
 app.use('/admin/audit-log', auditLogRoutes);
 app.use('/admin/email', emailRoutes);
 app.use('/admin/system-status', systemStatusRoutes);
+app.use('/admin/hiring', hiringRoutes);
 
 // ─── 404 Handler ───────────────────────────────────────────────────────────────
 app.use((req, res) => {
