@@ -7,7 +7,9 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "migrate": "node src/db/runMigrations.js",
-    "seed:root": "node src/db/seedRootAdmin.js"
+    "seed:root": "node src/db/seedRootAdmin.js",
+    "reset:admin": "node reset_root_admin.js",
+    "disable:2fa": "node disable_2fa.js"
   },
   "dependencies": {
     "express": "^4.21.0",
