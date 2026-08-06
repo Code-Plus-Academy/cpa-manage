@@ -92,6 +92,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (adminUser) {
+      if (activeTab === 'hiring') {
+        router.push('/hiring');
+        return;
+      }
       loadTabData(activeTab);
     }
   }, [adminUser, activeTab, statusFilter, categoryFilter, currentPage]);
@@ -390,7 +394,15 @@ export default function AdminDashboard() {
     <AdminShell
       adminUser={adminUser}
       activeTab={activeTab}
-      onTabChange={(tab) => { setActiveTab(tab); setSelectedItem(null); setCurrentPage(1); }}
+      onTabChange={(tab) => {
+        if (tab === 'hiring') {
+          router.push('/hiring');
+          return;
+        }
+        setActiveTab(tab);
+        setSelectedItem(null);
+        setCurrentPage(1);
+      }}
       onLogout={handleLogout}
       breadcrumb={getBreadcrumb()}
       slaAlertCount={tickets.filter(t => t.status === 'open' && new Date(t.sla_resolve_by) < new Date()).length}
