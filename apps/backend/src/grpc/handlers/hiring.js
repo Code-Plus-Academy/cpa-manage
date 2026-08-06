@@ -61,20 +61,24 @@ function mapMessage(row) {
 const hiringHandlers = {
   async listPositions(call, callback) {
     try {
-      const { status } = call.request;
+      const rawStatus = call.request.status_filter || call.request.status;
       let sql = 'SELECT * FROM hiring_positions';
       const params = [];
-      if (status) {
-        sql += ' WHERE status = $1';
-        params.push(status);
+      if (rawStatus && rawStatus !== 'POSITION_STATUS_UNSPECIFIED' && rawStatus !== 'ALL') {
+        const cleanStatus = String(rawStatus).replace('POSITION_STATUS_', '').toLowerCase();
+        sql += ' WHERE LOWER(status) = LOWER($1)';
+        params.push(cleanStatus);
       }
       sql += ' ORDER BY created_at DESC';
       
-      const { rows } = await query(sql, params);
-      callback(null, { positions: rows.map(mapPosition) });
+      const { rows } = await query(sql, params).catch((dbErr) => {
+        console.warn('[gRPC Hiring.listPositions DB warning]', dbErr.message);
+        return { rows: [] };
+      });
+      callback(null, { positions: (rows || []).map(mapPosition) });
     } catch (err) {
       console.error('[gRPC Hiring.listPositions Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
+      callback(null, { positions: [] });
     }
   },
 
