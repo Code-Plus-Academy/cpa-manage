@@ -69,6 +69,7 @@ async function requireAdminAuth(req, res, next) {
       permissions: permRows.map(r => r.permission_key),
       session_id: adminUser.session_id,
     };
+    req.admin = req.adminUser;
 
     // Update last_active_at (fire-and-forget)
     query('UPDATE admin_sessions SET last_active_at = NOW() WHERE token_hash = $1', [tokenHash]).catch(() => {});

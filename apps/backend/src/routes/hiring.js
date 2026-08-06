@@ -659,18 +659,25 @@ router.post('/templates', async (req, res, next) => {
   try {
     const { title, type, html_content, variables, is_active } = req.body;
 
+    let varsArray = ['candidate_name', 'position_title', 'start_date', 'compensation'];
+    if (Array.isArray(variables)) {
+      varsArray = variables;
+    } else if (typeof variables === 'string') {
+      try { varsArray = JSON.parse(variables); } catch (_) {}
+    }
+
     if (is_active !== false) {
       await query(`UPDATE hiring_document_templates SET is_active = false WHERE type = $1`, [type || 'offer_letter']);
     }
 
     const result = await query(
       `INSERT INTO hiring_document_templates (title, type, html_content, variables, is_active, version)
-       VALUES ($1, $2, $3, $4, $5, 1) RETURNING *`,
+       VALUES ($1, $2, $3, $4::jsonb, $5, 1) RETURNING *`,
       [
         title || 'Untitled Template',
         type || 'offer_letter',
         html_content || '<div style="padding: 20px;"><h2>Template Header</h2><p>Dear {{candidate_name}}, welcome!</p></div>',
-        JSON.stringify(variables || ['candidate_name', 'position_title', 'start_date', 'compensation']),
+        JSON.stringify(varsArray),
         is_active !== false
       ]
     );
@@ -679,8 +686,8 @@ router.post('/templates', async (req, res, next) => {
 
     await query(
       `INSERT INTO hiring_document_template_versions (template_id, version, html_content, variables, created_by)
-       VALUES ($1, 1, $2, $3, $4)`,
-      [template.id, template.html_content, JSON.stringify(variables || []), req.admin?.id || null]
+       VALUES ($1, 1, $2, $3::jsonb, $4)`,
+      [template.id, template.html_content, JSON.stringify(varsArray), req.admin?.id || null]
     );
 
     res.json({ template });
@@ -707,19 +714,30 @@ router.put('/templates/:id', async (req, res, next) => {
       await query(`UPDATE hiring_document_templates SET is_active = false WHERE type = $1 AND id != $2`, [oldTpl.type || type, id]);
     }
 
+    let varsJson = null;
+    let varsArray = oldTpl.variables || [];
+    if (variables !== undefined) {
+      if (Array.isArray(variables)) {
+        varsArray = variables;
+      } else if (typeof variables === 'string') {
+        try { varsArray = JSON.parse(variables); } catch (_) {}
+      }
+      varsJson = JSON.stringify(varsArray);
+    }
+
     const result = await query(
       `UPDATE hiring_document_templates SET
         title = COALESCE($1, title),
         type = COALESCE($2, type),
         html_content = COALESCE($3, html_content),
-        variables = COALESCE($4, variables),
+        variables = COALESCE($4::jsonb, variables),
         is_active = COALESCE($5, is_active),
         version = $6,
         updated_at = NOW()
        WHERE id = $7 RETURNING *`,
       [
         title, type, html_content,
-        variables ? JSON.stringify(variables) : null,
+        varsJson,
         is_active, newVersion, id
       ]
     );
@@ -728,8 +746,8 @@ router.put('/templates/:id', async (req, res, next) => {
 
     await query(
       `INSERT INTO hiring_document_template_versions (template_id, version, html_content, variables, created_by)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [template.id, newVersion, template.html_content, JSON.stringify(template.variables || []), req.admin?.id || null]
+       VALUES ($1, $2, $3, $4::jsonb, $5)`,
+      [template.id, newVersion, template.html_content, JSON.stringify(varsArray), req.admin?.id || null]
     );
 
     res.json({ template });
