@@ -3,6 +3,7 @@ const router = express.Router();
 const { query } = require('../config/db');
 const documentTriggerService = require('../services/documentTriggerService');
 const notificationService = require('../services/notificationService');
+const crypto = require('crypto');
 
 // ─── 1. POSITION MANAGEMENT ───────────────────────────────────────────────────
 
@@ -44,7 +45,7 @@ router.get('/positions', async (req, res, next) => {
   }
 });
 
-// POST /positions — Create position with full 10-spec field support
+// POST /positions — Create position with custom form fields
 router.post('/positions', async (req, res, next) => {
   try {
     const {
@@ -92,7 +93,7 @@ router.post('/positions', async (req, res, next) => {
   }
 });
 
-// GET /positions/:id — Get position details + audit trail
+// GET /positions/:id — Get position details + audit log
 router.get('/positions/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -118,7 +119,7 @@ router.get('/positions/:id', async (req, res, next) => {
   }
 });
 
-// PUT /positions/:id — Update position & log history
+// PUT /positions/:id — Update position
 router.put('/positions/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -160,7 +161,6 @@ router.put('/positions/:id', async (req, res, next) => {
 
     const position = result.rows[0];
 
-    // Log history
     await query(
       `INSERT INTO hiring_position_history (position_id, changed_by, change_type, changes)
        VALUES ($1, $2, 'update', $3)`,
@@ -211,8 +211,8 @@ router.post('/positions/:id/duplicate', async (req, res, next) => {
   }
 });
 
-// DELETE /positions/:id — Archive / Soft Close position
-router.delete('/positions/:id', async (req, res, next) => {
+// PATCH /positions/:id/archive — Archive / Close position (Updated Route Semantics)
+router.patch('/positions/:id/archive', async (req, res, next) => {
   try {
     const { id } = req.params;
     const result = await query(
@@ -222,15 +222,21 @@ router.delete('/positions/:id', async (req, res, next) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Position not found' } });
     }
-    res.json({ message: 'Position closed successfully', position: result.rows[0] });
+    res.json({ message: 'Position archived/closed successfully', position: result.rows[0] });
   } catch (error) {
     next(error);
   }
 });
 
+// Keep DELETE /positions/:id as alias for backwards compatibility
+router.delete('/positions/:id', async (req, res, next) => {
+  req.url = `/positions/${req.params.id}/archive`;
+  router.handle(req, res, next);
+});
+
 // ─── 2. CANDIDATE & APPLICATION PIPELINE ──────────────────────────────────────
 
-// GET /applications — List applications for Kanban & Table views
+// GET /applications — List applications with custom field responses
 router.get('/applications', async (req, res, next) => {
   try {
     const { status, position_id, search } = req.query;
@@ -270,14 +276,14 @@ router.get('/applications', async (req, res, next) => {
   }
 });
 
-// GET /applications/:id — Detailed application view
+// GET /applications/:id — Detailed view
 router.get('/applications/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
               p.title AS position_title, p.department AS position_department, p.type AS position_type,
-              p.description AS position_description
+              p.description AS position_description, p.custom_form_fields
        FROM hiring_applications a
        JOIN hiring_candidates c ON a.candidate_id = c.id
        JOIN hiring_positions p ON a.position_id = p.id
@@ -340,7 +346,6 @@ router.put('/applications/:id/status', async (req, res, next) => {
 
     const application = result.rows[0];
 
-    // Log status change audit trail
     if (status && status !== fromStatus) {
       await query(
         `INSERT INTO hiring_application_history (application_id, changed_by, changed_by_name, from_status, to_status, reason)
@@ -348,7 +353,6 @@ router.put('/applications/:id/status', async (req, res, next) => {
         [id, req.admin?.id || null, req.admin?.display_name || 'Admin', fromStatus, status, rejection_reason || notes || 'Status updated']
       );
 
-      // Trigger candidate email notification stub
       notificationService.notifyCandidateStatusChange(id, status);
     }
 
@@ -358,7 +362,7 @@ router.put('/applications/:id/status', async (req, res, next) => {
   }
 });
 
-// POST /applications/bulk-move — Bulk move applications
+// POST /applications/bulk-move — Bulk move
 router.post('/applications/bulk-move', async (req, res, next) => {
   try {
     const { application_ids, target_status } = req.body;
@@ -377,7 +381,7 @@ router.post('/applications/bulk-move', async (req, res, next) => {
   }
 });
 
-// POST /applications/bulk-reject — Bulk reject applications with reason
+// POST /applications/bulk-reject — Bulk reject with reason
 router.post('/applications/bulk-reject', async (req, res, next) => {
   try {
     const { application_ids, rejection_reason } = req.body;
@@ -505,7 +509,7 @@ router.post('/applications/:id/approve-preview', async (req, res, next) => {
   }
 });
 
-// POST /applications/:id/approve-confirm — Commit approval & dispatch offer
+// POST /applications/:id/approve-confirm — Commit approval & dispatch offer with serial number
 router.post('/applications/:id/approve-confirm', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -520,10 +524,31 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Application not found' } });
     }
 
+    const app = appRes.rows[0];
+    const serialNumber = `OFFER-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
+
+    // Log document in hiring_generated_documents
+    await query(
+      `INSERT INTO hiring_generated_documents (
+        application_id, document_type, rendered_html, serial_number, verification_code, variables_used, sent_to
+       ) VALUES ($1, 'offer_letter', $2, $3, $4, $5, $6)`,
+      [
+        id,
+        `<div>Offer Letter HTML for ${app.candidate_id}</div>`,
+        serialNumber,
+        verificationCode,
+        JSON.stringify({ offer_title, start_date, compensation, manager_name }),
+        app.candidate_email || 'candidate@example.com'
+      ]
+    );
+
     const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id);
 
     res.json({
-      application: appRes.rows[0],
+      application: app,
+      serial_number: serialNumber,
+      verification_code: verificationCode,
       document_trigger_status: docTriggerStatus,
       message: 'Application approved and offer letter dispatch initiated.'
     });
@@ -595,7 +620,73 @@ router.put('/tasks/:taskId', async (req, res, next) => {
   }
 });
 
-// ─── 6, 7 & 9. TEMPLATES, NOTIFICATION LOG & ANALYTICS OVERVIEW ──────────────
+// ─── 6, 7 & 10. GENERATED DOCUMENTS, SETTINGS & ANALYTICS ─────────────────────
+
+// GET /documents — Generated documents log
+router.get('/documents', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT d.*, c.name AS candidate_name, c.email AS candidate_email
+       FROM hiring_generated_documents d
+       JOIN hiring_applications a ON d.application_id = a.id
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       ORDER BY d.created_at DESC`
+    );
+    res.json({ documents: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /documents/:id/resend — Resend an already-generated document
+router.post('/documents/:id/resend', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const docRes = await query(`SELECT * FROM hiring_generated_documents WHERE id = $1`, [id]);
+    if (docRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Document not found' } });
+    }
+
+    const doc = docRes.rows[0];
+    notificationService.notifyCandidateStatusChange(doc.application_id, 'document_resent');
+
+    res.json({ message: `Successfully resent document ${doc.serial_number || doc.id} to ${doc.sent_to}` });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /settings — Get system hiring & document settings
+router.get('/settings', async (req, res, next) => {
+  try {
+    const result = await query(`SELECT * FROM hiring_settings WHERE id = 1`);
+    res.json({ settings: result.rows[0] || {} });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /settings — Update settings
+router.put('/settings', async (req, res, next) => {
+  try {
+    const { company_logo_url, letterhead_header_html, signature_image_url, default_sender_email, default_sender_name } = req.body;
+    const result = await query(
+      `UPDATE hiring_settings SET
+        company_logo_url = COALESCE($1, company_logo_url),
+        letterhead_header_html = COALESCE($2, letterhead_header_html),
+        signature_image_url = COALESCE($3, signature_image_url),
+        default_sender_email = COALESCE($4, default_sender_email),
+        default_sender_name = COALESCE($5, default_sender_name),
+        updated_at = NOW()
+       WHERE id = 1 RETURNING *`,
+      [company_logo_url, letterhead_header_html, signature_image_url, default_sender_email, default_sender_name]
+    );
+
+    res.json({ settings: result.rows[0] });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // GET /analytics/overview — Overview cards & funnel metrics
 router.get('/analytics/overview', async (req, res, next) => {
