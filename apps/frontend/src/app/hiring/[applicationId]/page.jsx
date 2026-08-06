@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import AdminShell from '../../../components/shell/AdminShell';
+import { apiFetch } from '../../../lib/apiClient';
 import {
   ArrowLeft, MessageSquare, Send, CheckCircle2, Clock, XCircle, AlertCircle,
   FileText, Sparkles, User, ShieldCheck, Plus, Check
@@ -50,7 +51,7 @@ export default function ApplicationDetailAdminPage() {
   const fetchDetail = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/admin/hiring/applications/${applicationId}`);
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}`);
       if (res.ok) {
         const data = await res.json();
         setApplication(data.application);
@@ -66,7 +67,7 @@ export default function ApplicationDetailAdminPage() {
 
   const fetchMessages = async () => {
     try {
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/messages`);
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/messages`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages || []);
@@ -78,7 +79,7 @@ export default function ApplicationDetailAdminPage() {
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/tasks`);
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/tasks`);
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);
@@ -93,7 +94,7 @@ export default function ApplicationDetailAdminPage() {
     if (!newNote.trim()) return;
 
     try {
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/notes`, {
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ note: newNote.trim() }),
@@ -112,7 +113,7 @@ export default function ApplicationDetailAdminPage() {
     if (!chatDraft.trim()) return;
 
     try {
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/messages`, {
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ body: chatDraft.trim() }),
@@ -131,7 +132,7 @@ export default function ApplicationDetailAdminPage() {
     if (!newTaskTitle.trim()) return;
 
     try {
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/tasks`, {
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: newTaskTitle.trim(), progress: 0 }),
@@ -149,7 +150,7 @@ export default function ApplicationDetailAdminPage() {
     const nextStatus = task.status === 'done' ? 'pending' : 'done';
     const nextProgress = nextStatus === 'done' ? 100 : 0;
     try {
-      const res = await fetch(`/admin/hiring/tasks/${task.id}`, {
+      const res = await apiFetch(`/admin/hiring/tasks/${task.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: nextStatus, progress: nextProgress }),
@@ -164,7 +165,7 @@ export default function ApplicationDetailAdminPage() {
     e.preventDefault();
     try {
       setPreviewLoading(true);
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/approve-preview`, {
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/approve-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(offerForm),
@@ -183,7 +184,7 @@ export default function ApplicationDetailAdminPage() {
   const handleConfirmApproval = async () => {
     try {
       setApproving(true);
-      const res = await fetch(`/admin/hiring/applications/${applicationId}/approve-confirm`, {
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/approve-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(offerForm),

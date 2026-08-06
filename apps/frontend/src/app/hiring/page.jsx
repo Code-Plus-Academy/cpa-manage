@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AdminShell from '../../components/shell/AdminShell';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Briefcase, Users, CheckCircle2, Clock, XCircle, Search, Filter, Plus,
   Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play
@@ -38,9 +39,9 @@ export default function HiringAdminDashboard() {
     try {
       setLoading(true);
       const [posRes, appRes, anaRes] = await Promise.all([
-        fetch('/admin/hiring/positions').then((r) => r.ok ? r.json() : { positions: [] }),
-        fetch('/admin/hiring/applications').then((r) => r.ok ? r.json() : { applications: [] }),
-        fetch('/admin/hiring/analytics/overview').then((r) => r.ok ? r.json() : null),
+        apiFetch('/admin/hiring/positions').then((r) => r.ok ? r.json() : { positions: [] }),
+        apiFetch('/admin/hiring/applications').then((r) => r.ok ? r.json() : { applications: [] }),
+        apiFetch('/admin/hiring/analytics/overview').then((r) => r.ok ? r.json() : null),
       ]);
 
       setPositions(posRes.positions || []);
@@ -59,7 +60,7 @@ export default function HiringAdminDashboard() {
       const url = editingPos ? `/admin/hiring/positions/${editingPos.id}` : '/admin/hiring/positions';
       const method = editingPos ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(posForm),
@@ -77,7 +78,7 @@ export default function HiringAdminDashboard() {
 
   const handleDuplicatePosition = async (id) => {
     try {
-      const res = await fetch(`/admin/hiring/positions/${id}/duplicate`, { method: 'POST' });
+      const res = await apiFetch(`/admin/hiring/positions/${id}/duplicate`, { method: 'POST' });
       if (res.ok) fetchDashboardData();
     } catch (err) {
       console.error('Failed to duplicate position:', err);
@@ -87,7 +88,7 @@ export default function HiringAdminDashboard() {
   const handleArchivePosition = async (id) => {
     if (!confirm('Are you sure you want to close/archive this position?')) return;
     try {
-      const res = await fetch(`/admin/hiring/positions/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/admin/hiring/positions/${id}/archive`, { method: 'PATCH' });
       if (res.ok) fetchDashboardData();
     } catch (err) {
       console.error('Failed to archive position:', err);
@@ -96,7 +97,7 @@ export default function HiringAdminDashboard() {
 
   const handleStatusChange = async (appId, newStatus) => {
     try {
-      const res = await fetch(`/admin/hiring/applications/${appId}/status`, {
+      const res = await apiFetch(`/admin/hiring/applications/${appId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -114,7 +115,7 @@ export default function HiringAdminDashboard() {
   const handleBulkReject = async () => {
     if (bulkSelected.length === 0) return;
     try {
-      const res = await fetch('/admin/hiring/applications/bulk-reject', {
+      const res = await apiFetch('/admin/hiring/applications/bulk-reject', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ application_ids: bulkSelected, rejection_reason: bulkRejectReason }),
