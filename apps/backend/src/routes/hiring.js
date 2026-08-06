@@ -642,7 +642,152 @@ router.put('/tasks/:taskId', async (req, res, next) => {
   }
 });
 
-// ─── 6, 7 & 10. GENERATED DOCUMENTS, SETTINGS & ANALYTICS ─────────────────────
+// ─── 6. DOCUMENT TEMPLATES & VERSIONING ───────────────────────────────────────
+
+// GET /templates — List document templates
+router.get('/templates', async (req, res, next) => {
+  try {
+    const result = await query(`SELECT * FROM hiring_document_templates ORDER BY created_at DESC`);
+    res.json({ templates: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /templates — Create template
+router.post('/templates', async (req, res, next) => {
+  try {
+    const { title, type, html_content, variables, is_active } = req.body;
+
+    if (is_active !== false) {
+      await query(`UPDATE hiring_document_templates SET is_active = false WHERE type = $1`, [type || 'offer_letter']);
+    }
+
+    const result = await query(
+      `INSERT INTO hiring_document_templates (title, type, html_content, variables, is_active, version)
+       VALUES ($1, $2, $3, $4, $5, 1) RETURNING *`,
+      [
+        title || 'Untitled Template',
+        type || 'offer_letter',
+        html_content || '<div style="padding: 20px;"><h2>Template Header</h2><p>Dear {{candidate_name}}, welcome!</p></div>',
+        JSON.stringify(variables || ['candidate_name', 'position_title', 'start_date', 'compensation']),
+        is_active !== false
+      ]
+    );
+
+    const template = result.rows[0];
+
+    await query(
+      `INSERT INTO hiring_document_template_versions (template_id, version, html_content, variables, created_by)
+       VALUES ($1, 1, $2, $3, $4)`,
+      [template.id, template.html_content, JSON.stringify(variables || []), req.admin?.id || null]
+    );
+
+    res.json({ template });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /templates/:id — Update template & log version history
+router.put('/templates/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, type, html_content, variables, is_active } = req.body;
+
+    const oldRes = await query(`SELECT * FROM hiring_document_templates WHERE id = $1`, [id]);
+    if (oldRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Template not found' } });
+    }
+
+    const oldTpl = oldRes.rows[0];
+    const newVersion = (oldTpl.version || 1) + 1;
+
+    if (is_active === true) {
+      await query(`UPDATE hiring_document_templates SET is_active = false WHERE type = $1 AND id != $2`, [oldTpl.type || type, id]);
+    }
+
+    const result = await query(
+      `UPDATE hiring_document_templates SET
+        title = COALESCE($1, title),
+        type = COALESCE($2, type),
+        html_content = COALESCE($3, html_content),
+        variables = COALESCE($4, variables),
+        is_active = COALESCE($5, is_active),
+        version = $6,
+        updated_at = NOW()
+       WHERE id = $7 RETURNING *`,
+      [
+        title, type, html_content,
+        variables ? JSON.stringify(variables) : null,
+        is_active, newVersion, id
+      ]
+    );
+
+    const template = result.rows[0];
+
+    await query(
+      `INSERT INTO hiring_document_template_versions (template_id, version, html_content, variables, created_by)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [template.id, newVersion, template.html_content, JSON.stringify(template.variables || []), req.admin?.id || null]
+    );
+
+    res.json({ template });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /templates/:id/versions — Version history for template
+router.get('/templates/:id/versions', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await query(
+      `SELECT v.*, a.display_name AS created_by_name
+       FROM hiring_document_template_versions v
+       LEFT JOIN admin_users a ON v.created_by = a.id
+       WHERE v.template_id = $1 ORDER BY v.version DESC`,
+      [id]
+    );
+    res.json({ versions: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /templates/:id/preview — Live HTML preview with dummy data
+router.post('/templates/:id/preview', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { dummy_data } = req.body;
+
+    const tplRes = await query(`SELECT * FROM hiring_document_templates WHERE id = $1`, [id]);
+    if (tplRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Template not found' } });
+    }
+
+    const tpl = tplRes.rows[0];
+    let rendered = tpl.html_content;
+
+    const sample = dummy_data || {
+      candidate_name: 'Alex Johnson',
+      position_title: 'Full-Stack Software Engineer',
+      start_date: 'September 1, 2026',
+      compensation: '$120,000 / year',
+      serial_number: 'OFFER-2026-000001',
+      verification_code: 'VERIFY-99A8B7',
+      issued_date: new Date().toLocaleDateString()
+    };
+
+    Object.entries(sample).forEach(([k, v]) => {
+      rendered = rendered.replace(new RegExp(`{{\\s*${k}\\s*}}`, 'g'), v);
+    });
+
+    res.json({ rendered_html: rendered, sample_used: sample });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // GET /documents — Generated documents log
 router.get('/documents', async (req, res, next) => {

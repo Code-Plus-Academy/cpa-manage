@@ -6,13 +6,14 @@ import AdminShell from '../../components/shell/AdminShell';
 import { apiFetch } from '../../lib/apiClient';
 import {
   Briefcase, Users, CheckCircle2, Clock, XCircle, Search, Filter, Plus,
-  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play, RefreshCw
+  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play, RefreshCw, FileCheck, Layers
 } from 'lucide-react';
 
 export default function HiringAdminDashboard() {
-  const [activeSubTab, setActiveSubTab] = useState('kanban'); // kanban | positions | documents | settings | analytics
+  const [activeSubTab, setActiveSubTab] = useState('kanban'); // kanban | positions | templates | documents | settings | analytics
   const [positions, setPositions] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [settings, setSettings] = useState({});
   const [analytics, setAnalytics] = useState(null);
@@ -28,6 +29,14 @@ export default function HiringAdminDashboard() {
     description: '', openings: 1, location: 'remote', salary_range: '',
     requirements: '', responsibilities: '', auto_response_enabled: true
   });
+
+  // Template Modal States
+  const [showTplModal, setShowTplModal] = useState(false);
+  const [editingTpl, setEditingTpl] = useState(null);
+  const [tplForm, setTplForm] = useState({
+    title: '', type: 'offer_letter', html_content: '', is_active: true
+  });
+  const [tplPreviewHtml, setTplPreviewHtml] = useState('');
 
   const [settingsForm, setSettingsForm] = useState({
     company_logo_url: '', letterhead_header_html: '', signature_image_url: '', default_sender_email: '', default_sender_name: ''
@@ -45,9 +54,10 @@ export default function HiringAdminDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [posRes, appRes, docRes, setRes, anaRes] = await Promise.all([
+      const [posRes, appRes, tplRes, docRes, setRes, anaRes] = await Promise.all([
         apiFetch('/admin/hiring/positions').then((r) => r.ok ? r.json() : { positions: [] }),
         apiFetch('/admin/hiring/applications').then((r) => r.ok ? r.json() : { applications: [] }),
+        apiFetch('/admin/hiring/templates').then((r) => r.ok ? r.json() : { templates: [] }),
         apiFetch('/admin/hiring/documents').then((r) => r.ok ? r.json() : { documents: [] }),
         apiFetch('/admin/hiring/settings').then((r) => r.ok ? r.json() : { settings: {} }),
         apiFetch('/admin/hiring/analytics/overview').then((r) => r.ok ? r.json() : null),
@@ -55,6 +65,7 @@ export default function HiringAdminDashboard() {
 
       setPositions(posRes.positions || []);
       setApplications(appRes.applications || []);
+      setTemplates(tplRes.templates || []);
       setDocuments(docRes.documents || []);
       const setObj = setRes.settings || {};
       setSettings(setObj);
@@ -92,6 +103,40 @@ export default function HiringAdminDashboard() {
       }
     } catch (err) {
       console.error('Failed to save position:', err);
+    }
+  };
+
+  const handleSaveTemplate = async (e) => {
+    e.preventDefault();
+    try {
+      const url = editingTpl ? `/admin/hiring/templates/${editingTpl.id}` : '/admin/hiring/templates';
+      const method = editingTpl ? 'PUT' : 'POST';
+
+      const res = await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tplForm),
+      });
+
+      if (res.ok) {
+        setShowTplModal(false);
+        setEditingTpl(null);
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to save template:', err);
+    }
+  };
+
+  const handlePreviewTemplate = async (tplId) => {
+    try {
+      const res = await apiFetch(`/admin/hiring/templates/${tplId}/preview`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setTplPreviewHtml(data.rendered_html);
+      }
+    } catch (err) {
+      console.error('Failed to preview template:', err);
     }
   };
 
@@ -208,7 +253,7 @@ export default function HiringAdminDashboard() {
               <Briefcase style={{ color: '#6366f1' }} /> Careers &amp; Candidate Pipeline
             </h1>
             <p style={{ margin: 0, color: '#9ca3af', fontSize: '14px' }}>
-              Manage job postings, track applicant Kanban pipeline, approve offers, oversee intern onboarding, and manage document logs.
+              Manage job postings, applicant Kanban pipeline, offer/certificate templates, document versioning, and email settings.
             </p>
           </div>
 
@@ -230,6 +275,21 @@ export default function HiringAdminDashboard() {
               }}
             >
               <Plus size={16} /> Create New Position
+            </button>
+
+            <button
+              onClick={() => {
+                setEditingTpl(null);
+                setTplForm({ title: '', type: 'certificate', html_content: '<div style="padding:40px; text-align:center;"><h1>CERTIFICATE OF COMPLETION</h1><p>Awarded to {{candidate_name}}</p></div>', is_active: true });
+                setShowTplModal(true);
+              }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 18px',
+                borderRadius: '8px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)',
+                color: '#ffffff', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              <Plus size={16} /> Add Document Template
             </button>
           </div>
         </div>
@@ -264,7 +324,8 @@ export default function HiringAdminDashboard() {
           {[
             { id: 'kanban', label: 'Pipeline Kanban', icon: Users },
             { id: 'positions', label: 'Position Management', icon: Briefcase },
-            { id: 'documents', label: 'Generated Documents', icon: FileText },
+            { id: 'templates', label: 'Document Templates', icon: Layers },
+            { id: 'documents', label: 'Generated Documents Log', icon: FileText },
             { id: 'settings', label: 'Branding & Settings', icon: Settings },
             { id: 'analytics', label: 'Funnel & Analytics', icon: BarChart3 },
           ].map((tab) => {
@@ -439,6 +500,45 @@ export default function HiringAdminDashboard() {
           </div>
         )}
 
+        {/* MODULE 6: DOCUMENT TEMPLATES & VERSIONING */}
+        {activeSubTab === 'templates' && (
+          <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(10, 11, 16, 0.8)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#9ca3af' }}>
+                  <th style={{ padding: '12px 16px' }}>TEMPLATE NAME</th>
+                  <th style={{ padding: '12px 16px' }}>TYPE</th>
+                  <th style={{ padding: '12px 16px' }}>VERSION</th>
+                  <th style={{ padding: '12px 16px' }}>ACTIVE STATUS</th>
+                  <th style={{ padding: '12px 16px' }}>LAST UPDATED</th>
+                  <th style={{ padding: '12px 16px' }}>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((t) => (
+                  <tr key={t.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '14px 16px', fontWeight: '700', color: '#ffffff' }}>{t.title}</td>
+                    <td style={{ padding: '14px 16px', textTransform: 'capitalize', color: '#9ca3af' }}>{t.type}</td>
+                    <td style={{ padding: '14px 16px' }}><span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', fontSize: '11px', fontWeight: '700' }}>v{t.version || 1}</span></td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700', background: t.is_active ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: t.is_active ? '#34d399' : '#f87171' }}>
+                        {t.is_active ? 'Active' : 'Draft / Inactive'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '14px 16px', color: '#9ca3af' }}>{new Date(t.updated_at || t.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={() => { setEditingTpl(t); setTplForm(t); setShowTplModal(true); }} style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer' }} title="Edit"><FileText size={16} /></button>
+                        <button onClick={() => handlePreviewTemplate(t.id)} style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer' }} title="Preview HTML"><Eye size={16} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* MODULE 6: GENERATED DOCUMENTS LOG */}
         {activeSubTab === 'documents' && (
           <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', overflow: 'hidden' }}>
@@ -544,6 +644,50 @@ export default function HiringAdminDashboard() {
                   <button type="submit" style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', background: '#6366f1', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>Save Position</button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Create/Edit Document Template Modal */}
+        {showTplModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px' }}>{editingTpl ? 'Edit Template' : 'Create Document Template'}</h2>
+              <form onSubmit={handleSaveTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Template Title</label>
+                  <input type="text" value={tplForm.title} onChange={(e) => setTplForm({ ...tplForm, title: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Document Type</label>
+                  <select value={tplForm.type} onChange={(e) => setTplForm({ ...tplForm, type: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                    <option value="offer_letter">Offer Letter</option>
+                    <option value="certificate">Certificate of Completion / Internship</option>
+                    <option value="contract">Employment Contract</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>HTML Content (Supports &#123;&#123;candidate_name&#125;&#125;, &#123;&#123;position_title&#125;&#125;, &#123;&#123;start_date&#125;&#125;)</label>
+                  <textarea rows={8} value={tplForm.html_content} onChange={(e) => setTplForm({ ...tplForm, html_content: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff', fontFamily: 'monospace', fontSize: '12px' }} />
+                </div>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button type="button" onClick={() => setShowTplModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>Cancel</button>
+                  <button type="submit" style={{ flex: 1, padding: '10px', borderRadius: '6px', border: 'none', background: '#6366f1', color: '#fff', fontWeight: '700', cursor: 'pointer' }}>Save Template</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Live HTML Preview Modal */}
+        {tplPreviewHtml && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
+            <div style={{ background: '#ffffff', color: '#000000', borderRadius: '16px', padding: '32px', width: '90%', maxWidth: '800px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, color: '#111827' }}>Live Template Render Preview</h3>
+                <button onClick={() => setTplPreviewHtml('')} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '4px', cursor: 'pointer' }}>Close Preview</button>
+              </div>
+              <div dangerouslySetInnerHTML={{ __html: tplPreviewHtml }} />
             </div>
           </div>
         )}
