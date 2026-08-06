@@ -42,7 +42,7 @@ export default function AdminShell({
     {
       title: 'HIRING & RECRUITMENT',
       items: [
-        { id: 'hiring', label: 'Careers & Hiring', icon: Briefcase, perm: 'hiring.view' },
+        { id: 'hiring', label: 'Careers & Hiring', icon: Briefcase },
       ],
     },
     {
@@ -133,7 +133,7 @@ export default function AdminShell({
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
           {navSections.map((sec) => {
             const visibleItems = sec.items.filter(
-              (item) => (item.rootOnly ? isRoot : hasPermission(item.perm))
+              (item) => (item.rootOnly ? isRoot : (item.perm ? hasPermission(item.perm) : true))
             );
 
             if (visibleItems.length === 0) return null;
@@ -159,6 +159,10 @@ export default function AdminShell({
                   const isActive = activeTab === item.id;
 
                   const handleNavClick = (id) => {
+                    if (id === 'hiring') {
+                      router.push('/hiring');
+                      return;
+                    }
                     if (onTabChange) {
                       onTabChange(id);
                     } else {
