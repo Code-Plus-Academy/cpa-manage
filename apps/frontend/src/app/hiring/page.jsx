@@ -6,13 +6,15 @@ import AdminShell from '../../components/shell/AdminShell';
 import { apiFetch } from '../../lib/apiClient';
 import {
   Briefcase, Users, CheckCircle2, Clock, XCircle, Search, Filter, Plus,
-  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play
+  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play, RefreshCw
 } from 'lucide-react';
 
 export default function HiringAdminDashboard() {
-  const [activeSubTab, setActiveSubTab] = useState('kanban'); // kanban | positions | templates | email_log | analytics
+  const [activeSubTab, setActiveSubTab] = useState('kanban'); // kanban | positions | documents | settings | analytics
   const [positions, setPositions] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [documents, setDocuments] = useState([]);
+  const [settings, setSettings] = useState({});
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,6 +29,11 @@ export default function HiringAdminDashboard() {
     requirements: '', responsibilities: '', auto_response_enabled: true
   });
 
+  const [settingsForm, setSettingsForm] = useState({
+    company_logo_url: '', letterhead_header_html: '', signature_image_url: '', default_sender_email: '', default_sender_name: ''
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const [bulkSelected, setBulkSelected] = useState([]);
   const [bulkRejectReason, setBulkRejectReason] = useState('');
   const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
@@ -38,14 +45,26 @@ export default function HiringAdminDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [posRes, appRes, anaRes] = await Promise.all([
+      const [posRes, appRes, docRes, setRes, anaRes] = await Promise.all([
         apiFetch('/admin/hiring/positions').then((r) => r.ok ? r.json() : { positions: [] }),
         apiFetch('/admin/hiring/applications').then((r) => r.ok ? r.json() : { applications: [] }),
+        apiFetch('/admin/hiring/documents').then((r) => r.ok ? r.json() : { documents: [] }),
+        apiFetch('/admin/hiring/settings').then((r) => r.ok ? r.json() : { settings: {} }),
         apiFetch('/admin/hiring/analytics/overview').then((r) => r.ok ? r.json() : null),
       ]);
 
       setPositions(posRes.positions || []);
       setApplications(appRes.applications || []);
+      setDocuments(docRes.documents || []);
+      const setObj = setRes.settings || {};
+      setSettings(setObj);
+      setSettingsForm({
+        company_logo_url: setObj.company_logo_url || '',
+        letterhead_header_html: setObj.letterhead_header_html || '',
+        signature_image_url: setObj.signature_image_url || '',
+        default_sender_email: setObj.default_sender_email || '',
+        default_sender_name: setObj.default_sender_name || '',
+      });
       setAnalytics(anaRes || null);
     } catch (err) {
       console.error('Failed to load hiring dashboard:', err);
@@ -130,6 +149,38 @@ export default function HiringAdminDashboard() {
     }
   };
 
+  const handleResendDocument = async (docId) => {
+    try {
+      const res = await apiFetch(`/admin/hiring/documents/${docId}/resend`, { method: 'POST' });
+      if (res.ok) {
+        alert('Document resent with incremented version!');
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to resend document:', err);
+    }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    try {
+      setSavingSettings(true);
+      const res = await apiFetch('/admin/hiring/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settingsForm),
+      });
+      if (res.ok) {
+        alert('Branding & Email settings updated!');
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to save settings:', err);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   const filteredApps = applications.filter((a) => {
     const matchesPos = selectedPositionFilter === 'ALL' || a.position_id === selectedPositionFilter;
     const matchesSearch =
@@ -157,7 +208,7 @@ export default function HiringAdminDashboard() {
               <Briefcase style={{ color: '#6366f1' }} /> Careers &amp; Candidate Pipeline
             </h1>
             <p style={{ margin: 0, color: '#9ca3af', fontSize: '14px' }}>
-              Manage job postings, track applicant Kanban pipeline, approve offers, and oversee intern onboarding.
+              Manage job postings, track applicant Kanban pipeline, approve offers, oversee intern onboarding, and manage document logs.
             </p>
           </div>
 
@@ -209,10 +260,12 @@ export default function HiringAdminDashboard() {
         )}
 
         {/* Sub-Tab Control Bar */}
-        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '20px', paddingBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', marginBottom: '20px', paddingBottom: '8px', flexWrap: 'wrap' }}>
           {[
             { id: 'kanban', label: 'Pipeline Kanban', icon: Users },
             { id: 'positions', label: 'Position Management', icon: Briefcase },
+            { id: 'documents', label: 'Generated Documents', icon: FileText },
+            { id: 'settings', label: 'Branding & Settings', icon: Settings },
             { id: 'analytics', label: 'Funnel & Analytics', icon: BarChart3 },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -383,6 +436,70 @@ export default function HiringAdminDashboard() {
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* MODULE 6: GENERATED DOCUMENTS LOG */}
+        {activeSubTab === 'documents' && (
+          <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ background: 'rgba(10, 11, 16, 0.8)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#9ca3af' }}>
+                  <th style={{ padding: '12px 16px' }}>SERIAL #</th>
+                  <th style={{ padding: '12px 16px' }}>RECIPIENT</th>
+                  <th style={{ padding: '12px 16px' }}>TYPE</th>
+                  <th style={{ padding: '12px 16px' }}>VERSION</th>
+                  <th style={{ padding: '12px 16px' }}>VERIFICATION CODE</th>
+                  <th style={{ padding: '12px 16px' }}>GENERATED AT</th>
+                  <th style={{ padding: '12px 16px' }}>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((d) => (
+                  <tr key={d.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                    <td style={{ padding: '14px 16px', fontWeight: '700', color: '#6366f1' }}>{d.serial_number || 'LEGACY-OFFER'}</td>
+                    <td style={{ padding: '14px 16px', color: '#ffffff' }}>{d.sent_to || d.candidate_email}</td>
+                    <td style={{ padding: '14px 16px', textTransform: 'capitalize' }}>{d.document_type || 'offer_letter'}</td>
+                    <td style={{ padding: '14px 16px' }}><span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', fontSize: '11px', fontWeight: '700' }}>v{d.document_version || 1}</span></td>
+                    <td style={{ padding: '14px 16px', fontFamily: 'monospace', color: '#34d399' }}>{d.verification_code || 'VERIFIED'}</td>
+                    <td style={{ padding: '14px 16px', color: '#9ca3af' }}>{new Date(d.created_at).toLocaleDateString()}</td>
+                    <td style={{ padding: '14px 16px' }}>
+                      <button onClick={() => handleResendDocument(d.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.2)', border: '1px solid rgba(99, 102, 241, 0.4)', color: '#818cf8', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>
+                        <RefreshCw size={13} /> Resend v{(d.document_version || 1) + 1}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* MODULE 10: SETTINGS & BRANDING */}
+        {activeSubTab === 'settings' && (
+          <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '24px', maxWidth: '700px' }}>
+            <h3 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px', color: '#ffffff' }}>Company Branding &amp; Email Settings</h3>
+            <form onSubmit={handleSaveSettings} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>Company Logo URL</label>
+                <input type="text" value={settingsForm.company_logo_url} onChange={(e) => setSettingsForm({ ...settingsForm, company_logo_url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(10, 11, 16, 0.6)', color: '#ffffff', fontSize: '13px', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>Default Sender Name</label>
+                <input type="text" value={settingsForm.default_sender_name} onChange={(e) => setSettingsForm({ ...settingsForm, default_sender_name: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(10, 11, 16, 0.6)', color: '#ffffff', fontSize: '13px', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>Default Sender Email</label>
+                <input type="email" value={settingsForm.default_sender_email} onChange={(e) => setSettingsForm({ ...settingsForm, default_sender_email: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(10, 11, 16, 0.6)', color: '#ffffff', fontSize: '13px', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>Signature Image URL</label>
+                <input type="text" value={settingsForm.signature_image_url} onChange={(e) => setSettingsForm({ ...settingsForm, signature_image_url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(10, 11, 16, 0.6)', color: '#ffffff', fontSize: '13px', outline: 'none' }} />
+              </div>
+              <button type="submit" disabled={savingSettings} style={{ padding: '12px 20px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer' }}>
+                {savingSettings ? 'Saving...' : 'Save Settings'}
+              </button>
+            </form>
           </div>
         )}
 
