@@ -35,9 +35,9 @@ app.use(cors({
       /^https:\/\/.*\.pages\.dev$/,
     ];
     if (allowedPatterns.some(p => p.test(origin))) {
-      callback(null, true);
+      return callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, false);
     }
   },
   credentials: true,
