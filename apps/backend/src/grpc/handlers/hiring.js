@@ -1,382 +1,376 @@
+const { pool } = require('../../config/db');
 const grpc = require('@grpc/grpc-js');
-const { query } = require('../../config/db');
-const crypto = require('crypto');
-const { triggerDocumentGeneration } = require('../../services/documentTriggerService');
-const { notifyCandidateStatusChange, notifyCandidateNewMessage } = require('../../services/notificationService');
 const EventEmitter = require('events');
+const documentTriggerService = require('../../services/documentTriggerService');
+const notificationService = require('../../services/notificationService');
 
 const messageEmitter = new EventEmitter();
 messageEmitter.setMaxListeners(0);
 
-/** Helper to validate and format UUID values for PostgreSQL */
-function parseUuid(val) {
-  if (!val || typeof val !== 'string') return null;
-  const trimmed = val.trim();
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(trimmed) ? trimmed : null;
-}
-
 function mapPosition(row) {
   if (!row) return null;
+  const statusMap = {
+    DRAFT: 1, draft: 1,
+    UPCOMING: 2, upcoming: 2,
+    OPEN: 3, open: 3,
+    CLOSED: 4, closed: 4,
+  };
   return {
-    id: String(row.id),
+    id: row.id,
     title: row.title || '',
-    description: row.description || '',
     department: row.department || '',
-    location: row.location || '',
-    employment_type: row.employment_type || '',
-    status: row.status || '',
-    salary_range: row.salary_range || '',
+    type: row.type || 'intern',
+    status: typeof row.status === 'number' ? row.status : (statusMap[row.status] || 3),
+    description: row.description || '',
+    openings: row.openings || 1,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : '',
-    updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : '',
+    location: row.location || 'remote',
+    requirements: row.requirements || '',
+    responsibilities: row.responsibilities || '',
+    salary_range: row.salary_range || '',
+    application_deadline: row.application_deadline ? new Date(row.application_deadline).toISOString() : '',
+    auto_response_enabled: row.auto_response_enabled !== false,
+    custom_form_fields_json: JSON.stringify(row.custom_form_fields || [])
   };
 }
 
 function mapApplication(row) {
   if (!row) return null;
+  const statusMap = {
+    APPLIED: 1, applied: 1,
+    IN_REVIEW: 2, in_review: 2,
+    INTERVIEW: 3, interview: 3,
+    APPROVED: 4, approved: 4,
+    REJECTED: 5, rejected: 5,
+  };
   return {
-    id: String(row.id),
-    position_id: String(row.position_id),
-    candidate_id: String(row.candidate_id),
-    status: row.status || '',
+    id: row.id,
+    candidate_id: row.candidate_id || '',
+    position_id: row.position_id || '',
+    status: typeof row.status === 'number' ? row.status : (statusMap[row.status] || 1),
     resume_url: row.resume_url || '',
-    cover_letter: row.cover_letter || '',
-    created_at: row.created_at ? new Date(row.created_at).toISOString() : '',
+    applied_at: row.applied_at ? new Date(row.applied_at).toISOString() : '',
     updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : '',
+    notes: row.notes || '',
+    candidate_name: row.candidate_name || row.name || '',
+    candidate_email: row.candidate_email || row.email || '',
+    candidate_phone: row.candidate_phone || row.phone || '',
+    assigned_owner_id: row.assigned_owner_id || '',
+    rejection_reason: row.rejection_reason || '',
+    rejection_notes: row.rejection_notes || '',
+    offer_status: row.offer_status || 'none'
   };
 }
 
 function mapMessage(row) {
   if (!row) return null;
+  const roleMap = { ADMIN: 1, admin: 1, CANDIDATE: 2, candidate: 2 };
   return {
-    id: String(row.id),
-    application_id: String(row.application_id),
-    sender_id: String(row.sender_id),
-    sender_role: row.sender_role || '',
-    content: row.content || '',
+    id: row.id,
+    application_id: row.application_id,
+    sender_role: typeof row.sender_role === 'number' ? row.sender_role : (roleMap[row.sender_role] || 2),
+    sender_id: row.sender_id || '',
+    body: row.body || '',
     created_at: row.created_at ? new Date(row.created_at).toISOString() : '',
   };
 }
 
-const hiringHandlers = {
-  async listPositions(call, callback) {
-    try {
-      const rawStatus = call.request.status_filter || call.request.status;
-      let sql = 'SELECT * FROM hiring_positions';
-      const params = [];
-      if (rawStatus && rawStatus !== 'POSITION_STATUS_UNSPECIFIED' && rawStatus !== 'ALL') {
-        const cleanStatus = String(rawStatus).replace('POSITION_STATUS_', '').toLowerCase();
-        sql += ' WHERE LOWER(status) = LOWER($1)';
-        params.push(cleanStatus);
-      }
-      sql += ' ORDER BY created_at DESC';
-      
-      const { rows } = await query(sql, params).catch((dbErr) => {
-        console.warn('[gRPC Hiring.listPositions DB warning]', dbErr.message);
-        return { rows: [] };
-      });
-      callback(null, { positions: (rows || []).map(mapPosition) });
-    } catch (err) {
-      console.error('[gRPC Hiring.listPositions Error]', err);
-      callback(null, { positions: [] });
-    }
-  },
+async function listPositions(call, callback) {
+  try {
+    const { status_filter } = call.request;
+    let sql = 'SELECT * FROM hiring_positions ORDER BY created_at DESC';
+    let params = [];
 
-  async getPosition(call, callback) {
-    try {
-      const { id } = call.request;
-      const safeId = parseUuid(id);
-      if (!safeId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid ID' });
-      
-      const { rows } = await query('SELECT * FROM hiring_positions WHERE id = $1', [safeId]);
-      if (rows.length === 0) return callback({ code: grpc.status.NOT_FOUND, message: 'Position not found' });
-      
-      callback(null, mapPosition(rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.getPosition Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
+    if (status_filter && status_filter !== 0) {
+      const statusNames = ['', 'draft', 'upcoming', 'open', 'closed'];
+      sql = 'SELECT * FROM hiring_positions WHERE status = $1 ORDER BY created_at DESC';
+      params = [statusNames[status_filter] || 'open'];
     }
-  },
 
-  async createPosition(call, callback) {
-    try {
-      const { title, description, department, location, employment_type, status, salary_range } = call.request;
-      const { rows } = await query(
-        `INSERT INTO hiring_positions (title, description, department, location, employment_type, status, salary_range)
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [title, description, department, location, employment_type, status || 'open', salary_range]
-      );
-      callback(null, mapPosition(rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.createPosition Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async updatePosition(call, callback) {
-    try {
-      const { id, title, description, department, location, employment_type, status, salary_range } = call.request;
-      const safeId = parseUuid(id);
-      if (!safeId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid ID' });
-      
-      const { rows } = await query(
-        `UPDATE hiring_positions 
-         SET title = COALESCE($1, title),
-             description = COALESCE($2, description),
-             department = COALESCE($3, department),
-             location = COALESCE($4, location),
-             employment_type = COALESCE($5, employment_type),
-             status = COALESCE($6, status),
-             salary_range = COALESCE($7, salary_range),
-             updated_at = NOW()
-         WHERE id = $8 RETURNING *`,
-        [title, description, department, location, employment_type, status, salary_range, safeId]
-      );
-      
-      if (rows.length === 0) return callback({ code: grpc.status.NOT_FOUND, message: 'Position not found' });
-      
-      callback(null, mapPosition(rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.updatePosition Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async submitApplication(call, callback) {
-    try {
-      const { position_id, email, first_name, last_name, phone, resume_url, cover_letter } = call.request;
-      const safePosId = parseUuid(position_id);
-      if (!safePosId || !email) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Missing position_id or email' });
-      
-      // Upsert candidate
-      const candRes = await query(
-        `INSERT INTO candidates (email, first_name, last_name, phone)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (email) DO UPDATE 
-         SET first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name, phone = EXCLUDED.phone
-         RETURNING id`,
-        [email, first_name, last_name, phone]
-      );
-      const candidateId = candRes.rows[0].id;
-      
-      // Insert application
-      const appRes = await query(
-        `INSERT INTO hiring_applications (position_id, candidate_id, resume_url, cover_letter, status)
-         VALUES ($1, $2, $3, $4, 'applied') RETURNING *`,
-        [safePosId, candidateId, resume_url, cover_letter]
-      );
-      
-      callback(null, mapApplication(appRes.rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.submitApplication Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async getApplicationStatus(call, callback) {
-    try {
-      const { application_id } = call.request;
-      const safeId = parseUuid(application_id);
-      if (!safeId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid ID' });
-      
-      const { rows } = await query('SELECT status FROM hiring_applications WHERE id = $1', [safeId]);
-      if (rows.length === 0) return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
-      
-      callback(null, { status: rows[0].status });
-    } catch (err) {
-      console.error('[gRPC Hiring.getApplicationStatus Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async listMyApplications(call, callback) {
-    try {
-      const { candidate_id } = call.request;
-      const safeId = parseUuid(candidate_id);
-      if (!safeId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid candidate_id' });
-      
-      const { rows } = await query('SELECT * FROM hiring_applications WHERE candidate_id = $1 ORDER BY created_at DESC', [safeId]);
-      callback(null, { applications: rows.map(mapApplication) });
-    } catch (err) {
-      console.error('[gRPC Hiring.listMyApplications Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async listAllApplications(call, callback) {
-    try {
-      const { status, position_id } = call.request;
-      let sql = 'SELECT * FROM hiring_applications WHERE 1=1';
-      const params = [];
-      let paramCounter = 1;
-      
-      if (status) {
-        sql += ` AND status = $${paramCounter++}`;
-        params.push(status);
-      }
-      
-      if (position_id) {
-        const safePosId = parseUuid(position_id);
-        if (safePosId) {
-          sql += ` AND position_id = $${paramCounter++}`;
-          params.push(safePosId);
-        }
-      }
-      
-      sql += ' ORDER BY created_at DESC';
-      
-      const { rows } = await query(sql, params);
-      callback(null, { applications: rows.map(mapApplication) });
-    } catch (err) {
-      console.error('[gRPC Hiring.listAllApplications Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async updateApplicationStatus(call, callback) {
-    try {
-      const { application_id, status } = call.request;
-      const safeId = parseUuid(application_id);
-      if (!safeId || !status) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Missing ID or status' });
-      
-      const { rows } = await query(
-        `UPDATE hiring_applications SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`,
-        [status, safeId]
-      );
-      
-      if (rows.length === 0) return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
-      
-      notifyCandidateStatusChange(safeId, status).catch(console.error);
-      
-      callback(null, mapApplication(rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.updateApplicationStatus Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async sendMessage(call, callback) {
-    try {
-      const { application_id, sender_id, sender_role, content } = call.request;
-      const safeAppId = parseUuid(application_id);
-      const safeSenderId = parseUuid(sender_id);
-      if (!safeAppId || !safeSenderId || !content) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Missing required fields' });
-      
-      const { rows } = await query(
-        `INSERT INTO hiring_messages (application_id, sender_id, sender_role, content)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [safeAppId, safeSenderId, sender_role, content]
-      );
-      
-      const msg = mapMessage(rows[0]);
-      messageEmitter.emit(`app:${safeAppId}`, msg);
-      
-      if (sender_role === 'admin') {
-        notifyCandidateNewMessage(safeAppId).catch(console.error);
-      }
-      
-      callback(null, msg);
-    } catch (err) {
-      console.error('[gRPC Hiring.sendMessage Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async getMessageHistory(call, callback) {
-    try {
-      const { application_id } = call.request;
-      const safeAppId = parseUuid(application_id);
-      if (!safeAppId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid application_id' });
-      
-      const { rows } = await query('SELECT * FROM hiring_messages WHERE application_id = $1 ORDER BY created_at ASC', [safeAppId]);
-      callback(null, { messages: rows.map(mapMessage) });
-    } catch (err) {
-      console.error('[gRPC Hiring.getMessageHistory Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  subscribeMessages(call) {
-    const { application_id } = call.request;
-    const safeAppId = parseUuid(application_id);
-    if (!safeAppId) {
-      call.end();
-      return;
-    }
-    
-    const channel = `app:${safeAppId}`;
-    const listener = (msg) => call.write(msg);
-    messageEmitter.on(channel, listener);
-    
-    call.on('cancelled', () => messageEmitter.off(channel, listener));
-    call.on('error', () => messageEmitter.off(channel, listener));
-    // Do not end the call here; it's a server streaming RPC.
-  },
-
-  async getMyTasks(call, callback) {
-    try {
-      const { application_id } = call.request;
-      const safeAppId = parseUuid(application_id);
-      if (!safeAppId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid application_id' });
-      
-      const { rows } = await query('SELECT * FROM hiring_tasks WHERE application_id = $1 ORDER BY created_at ASC', [safeAppId]);
-      // Note: Assuming a basic structure for tasks, map appropriately
-      const tasks = rows.map(row => ({
-        id: String(row.id),
-        application_id: String(row.application_id),
-        title: row.title || '',
-        description: row.description || '',
-        status: row.status || '',
-        created_at: row.created_at ? new Date(row.created_at).toISOString() : '',
-        updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : '',
-      }));
-      
-      callback(null, { tasks });
-    } catch (err) {
-      console.error('[gRPC Hiring.getMyTasks Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
-  },
-
-  async approveApplication(call, callback) {
-    try {
-      const { application_id } = call.request;
-      const safeId = parseUuid(application_id);
-      if (!safeId) return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Invalid ID' });
-      
-      const { rows } = await query(
-        `UPDATE hiring_applications SET status = 'approved', updated_at = NOW() WHERE id = $1 RETURNING *`,
-        [safeId]
-      );
-      
-      if (rows.length === 0) return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
-      
-      await triggerDocumentGeneration(safeId);
-      notifyCandidateStatusChange(safeId, 'approved').catch(console.error);
-      
-      callback(null, mapApplication(rows[0]));
-    } catch (err) {
-      console.error('[gRPC Hiring.approveApplication Error]', err);
-      callback({ code: grpc.status.INTERNAL, message: err.message });
-    }
+    const { rows } = await pool.query(sql, params);
+    callback(null, { positions: rows.map(mapPosition) });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
   }
-};
+}
+
+async function getPosition(call, callback) {
+  try {
+    const { id } = call.request;
+    const { rows } = await pool.query('SELECT * FROM hiring_positions WHERE id = $1', [id]);
+    if (rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Position not found' });
+    }
+    callback(null, mapPosition(rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function createPosition(call, callback) {
+  try {
+    const { title, department, type, description, openings, location } = call.request;
+    const { rows } = await pool.query(
+      `INSERT INTO hiring_positions (title, department, type, status, description, openings, location)
+       VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING *`,
+      [title, department || 'Engineering', type || 'intern', description || '', openings || 1, location || 'remote']
+    );
+    callback(null, mapPosition(rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function updatePosition(call, callback) {
+  try {
+    const { id, title, department, type, description, openings } = call.request;
+    const { rows } = await pool.query(
+      `UPDATE hiring_positions SET
+        title = COALESCE(NULLIF($1, ''), title),
+        department = COALESCE(NULLIF($2, ''), department),
+        type = COALESCE(NULLIF($3, ''), type),
+        description = COALESCE(NULLIF($4, ''), description),
+        openings = COALESCE(NULLIF($5, 0), openings),
+        updated_at = NOW()
+       WHERE id = $6 RETURNING *`,
+      [title, department, type, description, openings, id]
+    );
+    if (rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Position not found' });
+    }
+    callback(null, mapPosition(rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function submitApplication(call, callback) {
+  try {
+    const { candidate_id, position_id, resume_url, candidate_name, candidate_email, candidate_phone } = call.request;
+
+    if (!position_id || !resume_url || !candidate_email) {
+      return callback({ code: grpc.status.INVALID_ARGUMENT, message: 'Missing required application fields' });
+    }
+
+    const candRes = await pool.query(
+      `INSERT INTO hiring_candidates (name, email, phone)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, phone = COALESCE(EXCLUDED.phone, hiring_candidates.phone)
+       RETURNING id, name, email, phone`,
+      [candidate_name || 'Applicant', candidate_email.toLowerCase().trim(), candidate_phone || null]
+    );
+    const candidate = candRes.rows[0];
+
+    const appRes = await pool.query(
+      `INSERT INTO hiring_applications (candidate_id, position_id, resume_url, status)
+       VALUES ($1, $2, $3, 'applied')
+       RETURNING *`,
+      [candidate.id, position_id, resume_url]
+    );
+
+    const app = appRes.rows[0];
+    app.candidate_name = candidate.name;
+    app.candidate_email = candidate.email;
+    app.candidate_phone = candidate.phone;
+
+    callback(null, mapApplication(app));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function getApplicationStatus(call, callback) {
+  try {
+    const { application_id } = call.request;
+    const { rows } = await pool.query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       WHERE a.id = $1`,
+      [application_id]
+    );
+
+    if (rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
+    }
+
+    callback(null, mapApplication(rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function listMyApplications(call, callback) {
+  try {
+    const { candidate_id } = call.request;
+    const { rows } = await pool.query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       WHERE a.candidate_id = $1 OR c.email = $1
+       ORDER BY a.applied_at DESC`,
+      [candidate_id]
+    );
+
+    callback(null, { applications: rows.map(mapApplication) });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function listAllApplications(call, callback) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       ORDER BY a.applied_at DESC`
+    );
+
+    callback(null, { applications: rows.map(mapApplication) });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function updateApplicationStatus(call, callback) {
+  try {
+    const { application_id, status, notes } = call.request;
+    const statusNames = ['', 'applied', 'in_review', 'interview', 'approved', 'rejected'];
+    const statusStr = typeof status === 'number' ? (statusNames[status] || 'applied') : status;
+
+    const { rows } = await pool.query(
+      `UPDATE hiring_applications
+       SET status = COALESCE($1, status), notes = COALESCE($2, notes), updated_at = NOW()
+       WHERE id = $3 RETURNING *`,
+      [statusStr, notes, application_id]
+    );
+
+    if (rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
+    }
+
+    callback(null, mapApplication(rows[0]));
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function sendMessage(call, callback) {
+  try {
+    const { application_id, sender_role, sender_id, body } = call.request;
+    const roleMap = { 1: 'admin', 2: 'candidate' };
+    const roleStr = typeof sender_role === 'number' ? (roleMap[sender_role] || 'candidate') : sender_role;
+
+    const { rows } = await pool.query(
+      `INSERT INTO hiring_messages (application_id, sender_role, sender_id, body)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [application_id, roleStr, sender_id, body]
+    );
+
+    const msg = mapMessage(rows[0]);
+    messageEmitter.emit(`app:${application_id}`, msg);
+
+    callback(null, msg);
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function getMessageHistory(call, callback) {
+  try {
+    const { application_id } = call.request;
+    const { rows } = await pool.query(
+      'SELECT * FROM hiring_messages WHERE application_id = $1 ORDER BY created_at ASC',
+      [application_id]
+    );
+
+    callback(null, { messages: rows.map(mapMessage) });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+function subscribeMessages(call) {
+  const { application_id } = call.request;
+  const channel = `app:${application_id}`;
+
+  const listener = (msg) => {
+    try {
+      call.write(msg);
+    } catch (e) {
+      console.error('[gRPC Stream Error]', e.message);
+    }
+  };
+
+  messageEmitter.on(channel, listener);
+  call.on('cancelled', () => messageEmitter.off(channel, listener));
+  call.on('end', () => messageEmitter.off(channel, listener));
+  call.on('error', () => messageEmitter.off(channel, listener));
+}
+
+async function getMyTasks(call, callback) {
+  try {
+    const { application_id } = call.request;
+    const { rows } = await pool.query(
+      'SELECT * FROM hiring_intern_tasks WHERE application_id = $1 ORDER BY created_at ASC',
+      [application_id]
+    );
+
+    callback(null, {
+      tasks: rows.map((r) => ({
+        id: r.id,
+        application_id: r.application_id,
+        title: r.title,
+        status: r.status,
+        due_date: r.due_date ? new Date(r.due_date).toISOString() : '',
+        progress: r.progress || 0,
+      })),
+    });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
+
+async function approveApplication(call, callback) {
+  try {
+    const { application_id } = call.request;
+
+    const { rows } = await pool.query(
+      `UPDATE hiring_applications SET status = 'approved', updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [application_id]
+    );
+
+    if (rows.length === 0) {
+      return callback({ code: grpc.status.NOT_FOUND, message: 'Application not found' });
+    }
+
+    const docStatus = await documentTriggerService.triggerDocumentGeneration(application_id);
+
+    callback(null, {
+      application: mapApplication(rows[0]),
+      document_trigger_status: docStatus,
+      offer_preview_html: `<div>Offer Letter Preview for ${application_id}</div>`
+    });
+  } catch (err) {
+    callback({ code: grpc.status.INTERNAL, message: err.message });
+  }
+}
 
 module.exports = {
-  ...hiringHandlers,
-  ListPositions: hiringHandlers.listPositions,
-  GetPosition: hiringHandlers.getPosition,
-  CreatePosition: hiringHandlers.createPosition,
-  UpdatePosition: hiringHandlers.updatePosition,
-  SubmitApplication: hiringHandlers.submitApplication,
-  GetApplicationStatus: hiringHandlers.getApplicationStatus,
-  ListMyApplications: hiringHandlers.listMyApplications,
-  ListAllApplications: hiringHandlers.listAllApplications,
-  UpdateApplicationStatus: hiringHandlers.updateApplicationStatus,
-  SendMessage: hiringHandlers.sendMessage,
-  GetMessageHistory: hiringHandlers.getMessageHistory,
-  SubscribeMessages: hiringHandlers.subscribeMessages,
-  GetMyTasks: hiringHandlers.getMyTasks,
-  ApproveApplication: hiringHandlers.approveApplication,
-  messageEmitter
+  listPositions,
+  getPosition,
+  createPosition,
+  updatePosition,
+  submitApplication,
+  getApplicationStatus,
+  listMyApplications,
+  listAllApplications,
+  updateApplicationStatus,
+  sendMessage,
+  getMessageHistory,
+  subscribeMessages,
+  getMyTasks,
+  approveApplication,
+  messageEmitter,
 };

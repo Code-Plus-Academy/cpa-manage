@@ -33,10 +33,19 @@ message Position {
   string description = 6;
   int32 openings = 7;
   string created_at = 8;
+  string location = 9;
+  string requirements = 10;
+  string responsibilities = 11;
+  string salary_range = 12;
+  string application_deadline = 13;
+  bool auto_response_enabled = 14;
+  string custom_form_fields_json = 15;
 }
 
 message ListPositionsRequest {
   PositionStatus status_filter = 1;
+  string department_filter = 2;
+  string search_query = 3;
 }
 
 message ListPositionsResponse {
@@ -54,6 +63,13 @@ message CreatePositionRequest {
   PositionStatus status = 4;
   string description = 5;
   int32 openings = 6;
+  string location = 7;
+  string requirements = 8;
+  string responsibilities = 9;
+  string salary_range = 10;
+  string application_deadline = 11;
+  bool auto_response_enabled = 12;
+  string custom_form_fields_json = 13;
 }
 
 message UpdatePositionRequest {
@@ -64,6 +80,17 @@ message UpdatePositionRequest {
   PositionStatus status = 5;
   string description = 6;
   int32 openings = 7;
+  string location = 8;
+  string requirements = 9;
+  string responsibilities = 10;
+  string salary_range = 11;
+  string application_deadline = 12;
+  bool auto_response_enabled = 13;
+  string custom_form_fields_json = 14;
+}
+
+message DuplicatePositionRequest {
+  string position_id = 1;
 }
 
 message Application {
@@ -77,6 +104,11 @@ message Application {
   string notes = 8;
   string candidate_name = 9;
   string candidate_email = 10;
+  string candidate_phone = 11;
+  string assigned_owner_id = 12;
+  string rejection_reason = 13;
+  string rejection_notes = 14;
+  string offer_status = 15;
 }
 
 message SubmitApplicationRequest {
@@ -86,6 +118,7 @@ message SubmitApplicationRequest {
   string candidate_name = 4;
   string candidate_email = 5;
   string candidate_phone = 6;
+  string custom_answers_json = 7;
 }
 
 message GetApplicationStatusRequest {
@@ -99,10 +132,31 @@ message ListMyApplicationsRequest {
 message ListAllApplicationsRequest {
   ApplicationStatus status_filter = 1;
   string position_id_filter = 2;
+  string search_query = 3;
 }
 
 message ApplicationList {
   repeated Application applications = 1;
+}
+
+message ApplicationNote {
+  string id = 1;
+  string application_id = 2;
+  string admin_id = 3;
+  string admin_name = 4;
+  string note = 5;
+  string created_at = 6;
+}
+
+message AddApplicationNoteRequest {
+  string application_id = 1;
+  string admin_id = 2;
+  string admin_name = 3;
+  string note = 4;
+}
+
+message ApplicationNoteList {
+  repeated ApplicationNote notes = 1;
 }
 
 message Message {
@@ -153,17 +207,23 @@ message TaskList {
 message ApproveApplicationRequest {
   string application_id = 1;
   string approved_by = 2;
+  string offer_title = 3;
+  string start_date = 4;
+  string compensation = 5;
+  string manager_name = 6;
 }
 
 message ApproveApplicationResponse {
   Application application = 1;
   string document_trigger_status = 2;
+  string offer_preview_html = 3;
 }
 
 message UpdateApplicationStatusRequest {
   string application_id = 1;
   ApplicationStatus status = 2;
   string notes = 3;
+  string rejection_reason = 4;
 }
 
 service HiringService {
@@ -171,18 +231,19 @@ service HiringService {
   rpc GetPosition(GetPositionRequest) returns (Position);
   rpc CreatePosition(CreatePositionRequest) returns (Position);
   rpc UpdatePosition(UpdatePositionRequest) returns (Position);
+  rpc DuplicatePosition(DuplicatePositionRequest) returns (Position);
   
   rpc SubmitApplication(SubmitApplicationRequest) returns (Application);
   rpc GetApplicationStatus(GetApplicationStatusRequest) returns (Application);
   rpc ListMyApplications(ListMyApplicationsRequest) returns (ApplicationList);
   rpc ListAllApplications(ListAllApplicationsRequest) returns (ApplicationList);
   rpc UpdateApplicationStatus(UpdateApplicationStatusRequest) returns (Application);
+  rpc AddApplicationNote(AddApplicationNoteRequest) returns (ApplicationNote);
   
   rpc SendMessage(SendMessageRequest) returns (Message);
   rpc GetMessageHistory(GetMessageHistoryRequest) returns (MessageList);
   rpc SubscribeMessages(SubscribeMessagesRequest) returns (stream Message);
   
   rpc GetMyTasks(GetMyTasksRequest) returns (TaskList);
-  
   rpc ApproveApplication(ApproveApplicationRequest) returns (ApproveApplicationResponse);
 }
