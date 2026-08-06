@@ -8,6 +8,14 @@ ALTER TABLE hiring_generated_documents
   ADD COLUMN IF NOT EXISTS document_version INT NOT NULL DEFAULT 1,
   ADD COLUMN IF NOT EXISTS previous_document_id UUID REFERENCES hiring_generated_documents(id);
 
+-- Document Sequential Counter Table (atomic OFFER-2026-000001 serial numbers)
+CREATE TABLE IF NOT EXISTS hiring_document_counters (
+  doc_type VARCHAR(50) NOT NULL,
+  year INT NOT NULL,
+  last_value INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (doc_type, year)
+);
+
 -- 2. Template Versioning Table
 CREATE TABLE IF NOT EXISTS hiring_document_template_versions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,9 +1,25 @@
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/db');
+const { query, getClient } = require('../config/db');
 const documentTriggerService = require('../services/documentTriggerService');
 const notificationService = require('../services/notificationService');
 const crypto = require('crypto');
+
+// Helper to generate human-readable sequential serial numbers (e.g. OFFER-2026-000142)
+async function generateSequentialSerialNumber(docType = 'OFFER') {
+  const year = new Date().getFullYear();
+  const res = await query(
+    `INSERT INTO hiring_document_counters (doc_type, year, last_value)
+     VALUES ($1, $2, 1)
+     ON CONFLICT (doc_type, year)
+     DO UPDATE SET last_value = hiring_document_counters.last_value + 1
+     RETURNING last_value`,
+    [docType.toUpperCase(), year]
+  );
+  const counter = res.rows[0].last_value;
+  const paddedCounter = String(counter).padStart(6, '0');
+  return `${docType.toUpperCase()}-${year}-${paddedCounter}`;
+}
 
 // ─── 1. POSITION MANAGEMENT ───────────────────────────────────────────────────
 
@@ -45,7 +61,7 @@ router.get('/positions', async (req, res, next) => {
   }
 });
 
-// POST /positions — Create position with custom form fields
+// POST /positions — Create position
 router.post('/positions', async (req, res, next) => {
   try {
     const {
@@ -80,7 +96,6 @@ router.post('/positions', async (req, res, next) => {
 
     const position = result.rows[0];
 
-    // Log history
     await query(
       `INSERT INTO hiring_position_history (position_id, changed_by, change_type, changes)
        VALUES ($1, $2, 'create', $3)`,
@@ -211,7 +226,7 @@ router.post('/positions/:id/duplicate', async (req, res, next) => {
   }
 });
 
-// PATCH /positions/:id/archive — Archive / Close position (Updated Route Semantics)
+// PATCH /positions/:id/archive — Archive / Close position
 router.patch('/positions/:id/archive', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -228,15 +243,20 @@ router.patch('/positions/:id/archive', async (req, res, next) => {
   }
 });
 
-// Keep DELETE /positions/:id as alias for backwards compatibility
+/**
+ * @deprecated Use PATCH /positions/:id/archive instead.
+ * Temporary backward compatibility alias.
+ */
 router.delete('/positions/:id', async (req, res, next) => {
+  res.setHeader('Deprecation', 'true');
+  res.setHeader('Link', '</positions/' + req.params.id + '/archive>; rel="successor-version"');
   req.url = `/positions/${req.params.id}/archive`;
   router.handle(req, res, next);
 });
 
 // ─── 2. CANDIDATE & APPLICATION PIPELINE ──────────────────────────────────────
 
-// GET /applications — List applications with custom field responses
+// GET /applications — List applications
 router.get('/applications', async (req, res, next) => {
   try {
     const { status, position_id, search } = req.query;
@@ -321,7 +341,7 @@ router.get('/applications/:id', async (req, res, next) => {
   }
 });
 
-// PUT /applications/:id/status — Status transition & audit log
+// PUT /applications/:id/status — Status transition
 router.put('/applications/:id/status', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -381,7 +401,7 @@ router.post('/applications/bulk-move', async (req, res, next) => {
   }
 });
 
-// POST /applications/bulk-reject — Bulk reject with reason
+// POST /applications/bulk-reject — Bulk reject
 router.post('/applications/bulk-reject', async (req, res, next) => {
   try {
     const { application_ids, rejection_reason } = req.body;
@@ -400,7 +420,7 @@ router.post('/applications/bulk-reject', async (req, res, next) => {
   }
 });
 
-// POST /applications/:id/notes — Add timestamped admin note
+// POST /applications/:id/notes — Add note
 router.post('/applications/:id/notes', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -438,7 +458,7 @@ router.get('/applications/:id/messages', async (req, res, next) => {
   }
 });
 
-// POST /applications/:id/messages — Send admin message & notify candidate
+// POST /applications/:id/messages — Send message
 router.post('/applications/:id/messages', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -465,7 +485,7 @@ router.post('/applications/:id/messages', async (req, res, next) => {
 
 // ─── 4. APPROVAL WORKFLOW & OFFER LETTER PREVIEW ─────────────────────────────
 
-// POST /applications/:id/approve-preview — Render HTML offer letter preview
+// POST /applications/:id/approve-preview — Render HTML offer preview
 router.post('/applications/:id/approve-preview', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -509,7 +529,7 @@ router.post('/applications/:id/approve-preview', async (req, res, next) => {
   }
 });
 
-// POST /applications/:id/approve-confirm — Commit approval & dispatch offer with serial number
+// POST /applications/:id/approve-confirm — Commit approval & dispatch offer with atomic sequential serial (e.g. OFFER-2026-000142)
 router.post('/applications/:id/approve-confirm', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -525,14 +545,15 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
     }
 
     const app = appRes.rows[0];
-    const serialNumber = `OFFER-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const serialNumber = await generateSequentialSerialNumber('OFFER');
     const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
 
     // Log document in hiring_generated_documents
-    await query(
+    const docRes = await query(
       `INSERT INTO hiring_generated_documents (
-        application_id, document_type, rendered_html, serial_number, verification_code, variables_used, sent_to
-       ) VALUES ($1, 'offer_letter', $2, $3, $4, $5, $6)`,
+        application_id, document_type, rendered_html, serial_number, verification_code, document_version, variables_used, sent_to
+       ) VALUES ($1, 'offer_letter', $2, $3, $4, 1, $5, $6)
+       RETURNING *`,
       [
         id,
         `<div>Offer Letter HTML for ${app.candidate_id}</div>`,
@@ -547,10 +568,11 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
 
     res.json({
       application: app,
+      document: docRes.rows[0],
       serial_number: serialNumber,
       verification_code: verificationCode,
       document_trigger_status: docTriggerStatus,
-      message: 'Application approved and offer letter dispatch initiated.'
+      message: `Application approved and offer letter ${serialNumber} dispatched.`
     });
   } catch (error) {
     next(error);
@@ -638,7 +660,7 @@ router.get('/documents', async (req, res, next) => {
   }
 });
 
-// POST /documents/:id/resend — Resend an already-generated document
+// POST /documents/:id/resend — Resend & increment document version with linkage
 router.post('/documents/:id/resend', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -647,10 +669,37 @@ router.post('/documents/:id/resend', async (req, res, next) => {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Document not found' } });
     }
 
-    const doc = docRes.rows[0];
-    notificationService.notifyCandidateStatusChange(doc.application_id, 'document_resent');
+    const origDoc = docRes.rows[0];
+    const newVersionNumber = (origDoc.document_version || 1) + 1;
+    const newSerial = await generateSequentialSerialNumber(origDoc.document_type || 'OFFER');
+    const newVerificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
 
-    res.json({ message: `Successfully resent document ${doc.serial_number || doc.id} to ${doc.sent_to}` });
+    const newDocRes = await query(
+      `INSERT INTO hiring_generated_documents (
+        application_id, template_id, document_type, rendered_html, serial_number,
+        verification_code, document_version, previous_document_id, variables_used, sent_to
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING *`,
+      [
+        origDoc.application_id,
+        origDoc.template_id,
+        origDoc.document_type,
+        origDoc.rendered_html,
+        newSerial,
+        newVerificationCode,
+        newVersionNumber,
+        origDoc.id,
+        origDoc.variables_used,
+        origDoc.sent_to
+      ]
+    );
+
+    notificationService.notifyCandidateStatusChange(origDoc.application_id, 'document_resent');
+
+    res.json({
+      message: `Successfully generated version ${newVersionNumber} (${newSerial}) and resent to ${origDoc.sent_to}`,
+      document: newDocRes.rows[0]
+    });
   } catch (error) {
     next(error);
   }
@@ -666,10 +715,15 @@ router.get('/settings', async (req, res, next) => {
   }
 });
 
-// PUT /settings — Update settings
+// PUT /settings — Update settings with input validation
 router.put('/settings', async (req, res, next) => {
   try {
     const { company_logo_url, letterhead_header_html, signature_image_url, default_sender_email, default_sender_name } = req.body;
+
+    if (default_sender_email && !default_sender_email.includes('@')) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid default sender email format' } });
+    }
+
     const result = await query(
       `UPDATE hiring_settings SET
         company_logo_url = COALESCE($1, company_logo_url),
