@@ -564,7 +564,11 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
       ]
     );
 
-    const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id);
+    const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id, {
+      offer_title,
+      serial_number: serialNumber,
+      compensation
+    });
 
     res.json({
       application: app,
