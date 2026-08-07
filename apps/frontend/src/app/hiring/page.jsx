@@ -47,6 +47,8 @@ export default function HiringAdminDashboard() {
   const [bulkRejectReason, setBulkRejectReason] = useState('');
   const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
 
+  const [positionAnalytics, setPositionAnalytics] = useState([]);
+
   useEffect(() => {
     fetchDashboardData();
   }, []);
@@ -54,13 +56,14 @@ export default function HiringAdminDashboard() {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [posRes, appRes, tplRes, docRes, setRes, anaRes] = await Promise.all([
+      const [posRes, appRes, tplRes, docRes, setRes, anaRes, posAnaRes] = await Promise.all([
         apiFetch('/admin/hiring/positions').then((r) => r.ok ? r.json() : { positions: [] }),
         apiFetch('/admin/hiring/applications').then((r) => r.ok ? r.json() : { applications: [] }),
         apiFetch('/admin/hiring/templates').then((r) => r.ok ? r.json() : { templates: [] }),
         apiFetch('/admin/hiring/documents').then((r) => r.ok ? r.json() : { documents: [] }),
         apiFetch('/admin/hiring/settings').then((r) => r.ok ? r.json() : { settings: {} }),
         apiFetch('/admin/hiring/analytics/overview').then((r) => r.ok ? r.json() : null),
+        apiFetch('/admin/hiring/analytics/position-wise').then((r) => r.ok ? r.json() : { position_analytics: [] }),
       ]);
 
       setPositions(posRes.positions || []);
@@ -77,6 +80,7 @@ export default function HiringAdminDashboard() {
         default_sender_name: setObj.default_sender_name || '',
       });
       setAnalytics(anaRes || null);
+      setPositionAnalytics(posAnaRes.position_analytics || []);
     } catch (err) {
       console.error('Failed to load hiring dashboard:', err);
     } finally {
@@ -103,6 +107,28 @@ export default function HiringAdminDashboard() {
       }
     } catch (err) {
       console.error('Failed to save position:', err);
+    }
+  };
+
+  const handleDeletePosition = async (id) => {
+    if (!confirm('Are you sure you want to permanently delete this position? This action cannot be undone.')) return;
+    try {
+      const res = await apiFetch(`/admin/hiring/positions/${id}`, { method: 'DELETE' });
+      if (res.ok) fetchDashboardData();
+    } catch (err) {
+      console.error('Failed to delete position:', err);
+    }
+  };
+
+  const handleImportDefaultSettings = async () => {
+    try {
+      const res = await apiFetch('/admin/hiring/settings/import-defaults', { method: 'POST' });
+      if (res.ok) {
+        alert('Branding settings reset to system defaults from .env');
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Failed to import default settings:', err);
     }
   };
 
@@ -490,7 +516,8 @@ export default function HiringAdminDashboard() {
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button onClick={() => { setEditingPos(p); setPosForm(p); setShowPosModal(true); }} style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer' }} title="Edit"><FileText size={16} /></button>
                         <button onClick={() => handleDuplicatePosition(p.id)} style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer' }} title="Duplicate"><Copy size={16} /></button>
-                        <button onClick={() => handleArchivePosition(p.id)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }} title="Archive"><Archive size={16} /></button>
+                        <button onClick={() => handleArchivePosition(p.id)} style={{ background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer' }} title="Archive"><Archive size={16} /></button>
+                        <button onClick={() => handleDeletePosition(p.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }} title="Delete Permanently"><XCircle size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -596,48 +623,122 @@ export default function HiringAdminDashboard() {
                 <label style={{ fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>Signature Image URL</label>
                 <input type="text" value={settingsForm.signature_image_url} onChange={(e) => setSettingsForm({ ...settingsForm, signature_image_url: e.target.value })} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(10, 11, 16, 0.6)', color: '#ffffff', fontSize: '13px', outline: 'none' }} />
               </div>
-              <button type="submit" disabled={savingSettings} style={{ padding: '12px 20px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer' }}>
-                {savingSettings ? 'Saving...' : 'Save Settings'}
-              </button>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                <button type="submit" disabled={savingSettings} style={{ padding: '12px 20px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer' }}>
+                  {savingSettings ? 'Saving...' : 'Save Settings'}
+                </button>
+                <button type="button" onClick={handleImportDefaultSettings} style={{ padding: '12px 20px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)', color: '#e5e7eb', fontWeight: '600', cursor: 'pointer' }}>
+                  Import Defaults from .env
+                </button>
+              </div>
             </form>
           </div>
         )}
 
         {/* MODULE 9: FUNNEL & ANALYTICS */}
         {activeSubTab === 'analytics' && analytics && (
-          <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '24px' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>Recruitment Funnel Breakdown</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {(analytics.funnel || []).map((f) => (
-                <div key={f.status} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span style={{ width: '120px', textTransform: 'capitalize', fontWeight: '600', fontSize: '13px' }}>{f.status}</span>
-                  <div style={{ flex: 1, background: 'rgba(255,255,255,0.06)', borderRadius: '9999px', height: '12px', overflow: 'hidden' }}>
-                    <div style={{ width: `${Math.min(100, (f.count / (analytics.total_applications || 1)) * 100)}%`, background: '#6366f1', height: '100%' }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '24px' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>Recruitment Funnel Breakdown</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {(analytics.funnel || []).map((f) => (
+                  <div key={f.status} style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <span style={{ width: '120px', textTransform: 'capitalize', fontWeight: '600', fontSize: '13px' }}>{f.status}</span>
+                    <div style={{ flex: 1, background: 'rgba(255,255,255,0.06)', borderRadius: '9999px', height: '12px', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.min(100, (f.count / (analytics.total_applications || 1)) * 100)}%`, background: '#6366f1', height: '100%' }} />
+                    </div>
+                    <span style={{ fontWeight: '700', fontSize: '13px', width: '40px' }}>{f.count}</span>
                   </div>
-                  <span style={{ fontWeight: '700', fontSize: '13px', width: '40px' }}>{f.count}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+
+            {/* Position-Wise Funnel Analytics */}
+            {positionAnalytics.length > 0 && (
+              <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: '700', marginBottom: '16px' }}>Position-Wise Recruitment Analytics</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ background: 'rgba(10, 11, 16, 0.8)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#9ca3af' }}>
+                        <th style={{ padding: '10px 14px' }}>POSITION</th>
+                        <th style={{ padding: '10px 14px' }}>DEPARTMENT</th>
+                        <th style={{ padding: '10px 14px' }}>STATUS</th>
+                        <th style={{ padding: '10px 14px' }}>TOTAL APPS</th>
+                        <th style={{ padding: '10px 14px' }}>APPLIED</th>
+                        <th style={{ padding: '10px 14px' }}>IN REVIEW</th>
+                        <th style={{ padding: '10px 14px' }}>INTERVIEW</th>
+                        <th style={{ padding: '10px 14px' }}>APPROVED</th>
+                        <th style={{ padding: '10px 14px' }}>REJECTED</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positionAnalytics.map((pa) => (
+                        <tr key={pa.position_id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                          <td style={{ padding: '12px 14px', fontWeight: '700', color: '#ffffff' }}>{pa.position_title}</td>
+                          <td style={{ padding: '12px 14px', color: '#9ca3af' }}>{pa.department}</td>
+                          <td style={{ padding: '12px 14px' }}>
+                            <span style={{ padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700', background: pa.position_status === 'open' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: pa.position_status === 'open' ? '#34d399' : '#fbbf24' }}>
+                              {pa.position_status}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 14px', fontWeight: '700' }}>{pa.total_applications}</td>
+                          <td style={{ padding: '12px 14px', color: '#818cf8' }}>{pa.applied_count}</td>
+                          <td style={{ padding: '12px 14px', color: '#fbbf24' }}>{pa.in_review_count}</td>
+                          <td style={{ padding: '12px 14px', color: '#38bdf8' }}>{pa.interview_count}</td>
+                          <td style={{ padding: '12px 14px', color: '#34d399', fontWeight: '700' }}>{pa.approved_count}</td>
+                          <td style={{ padding: '12px 14px', color: '#f87171' }}>{pa.rejected_count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* Create/Edit Position Modal */}
         {showPosModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '600px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '650px', maxHeight: '90vh', overflowY: 'auto' }}>
               <h2 style={{ fontSize: '18px', fontWeight: '800', marginBottom: '16px' }}>{editingPos ? 'Edit Position' : 'Create Position'}</h2>
               <form onSubmit={handleCreateOrUpdatePosition} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Title</label>
                   <input type="text" value={posForm.title} onChange={(e) => setPosForm({ ...posForm, title: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
                 </div>
-                <div>
-                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Department</label>
-                  <input type="text" value={posForm.department} onChange={(e) => setPosForm({ ...posForm, department: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Department</label>
+                    <select value={posForm.department} onChange={(e) => setPosForm({ ...posForm, department: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="Engineering">Engineering</option>
+                      <option value="Product">Product</option>
+                      <option value="Design">Design</option>
+                      <option value="Marketing">Marketing</option>
+                      <option value="Sales">Sales</option>
+                      <option value="HR">HR</option>
+                      <option value="Operations">Operations</option>
+                      <option value="Finance">Finance</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Status</label>
+                    <select value={posForm.status} onChange={(e) => setPosForm({ ...posForm, status: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="open">Open</option>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="closed">Closed</option>
+                      <option value="draft">Draft</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Description</label>
-                  <textarea rows={4} value={posForm.description} onChange={(e) => setPosForm({ ...posForm, description: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  <textarea rows={3} value={posForm.description} onChange={(e) => setPosForm({ ...posForm, description: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Role & Responsibilities</label>
+                  <textarea rows={3} value={posForm.responsibilities} onChange={(e) => setPosForm({ ...posForm, responsibilities: e.target.value })} placeholder="List key responsibilities..." style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <button type="button" onClick={() => setShowPosModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>Cancel</button>
