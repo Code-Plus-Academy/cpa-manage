@@ -1,61 +1,56 @@
 /**
  * Email Dispatcher Service — cpa-manage backend.
- * Dispatches real emails via Resend API or SMTP when configured, and falls back gracefully.
+ * Dispatches real emails via official Resend SDK with automatic fallback and error reporting.
  */
-const https = require('https');
+const { Resend } = require('resend');
 
 async function sendMail({ to, subject, html }) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.EMAIL_FROM_AUTH || process.env.EMAIL_FROM_SYSTEM || 'security@codeplusacademy.in';
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.warn('[EmailService] RESEND_API_KEY missing in environment variables on Render. Email not dispatched to network.');
+    return false;
+  }
 
-  if (resendApiKey) {
-    try {
-      const payload = JSON.stringify({
-        from: `Code+ Academy Admin <${fromEmail}>`,
-        to: [to],
-        subject,
-        html,
-      });
+  const resend = new Resend(apiKey);
+  const configuredFrom = process.env.EMAIL_FROM_AUTH || process.env.EMAIL_FROM_SYSTEM || 'security@codeplusacademy.in';
+  const fromAddress = configuredFrom.includes('<') ? configuredFrom : `Code+ Academy Admin <${configuredFrom}>`;
 
-      return new Promise((resolve, reject) => {
-        const req = https.request({
-          hostname: 'api.resend.com',
-          port: 443,
-          path: '/emails',
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${resendApiKey}`,
-            'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(payload),
-          },
-        }, (res) => {
-          let body = '';
-          res.on('data', chunk => body += chunk);
-          res.on('end', () => {
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              console.log(`[EmailService] OTP Email sent successfully to ${to} via Resend`);
-              resolve(true);
-            } else {
-              console.warn(`[EmailService] Resend API returned status ${res.statusCode}: ${body}`);
-              resolve(false);
-            }
-          });
+  try {
+    const result = await resend.emails.send({
+      from: fromAddress,
+      to: [to],
+      subject,
+      html,
+    });
+
+    if (result.error) {
+      console.error('[EmailService] Primary Resend send failed:', result.error);
+
+      // Automatic fallback to Resend testing sender if custom domain is unverified
+      if (!fromAddress.includes('onboarding@resend.dev')) {
+        console.info('[EmailService] Retrying send via onboarding@resend.dev...');
+        const retryResult = await resend.emails.send({
+          from: 'Code+ Academy <onboarding@resend.dev>',
+          to: [to],
+          subject,
+          html,
         });
 
-        req.on('error', err => {
-          console.error(`[EmailService] Failed to send email via Resend:`, err);
-          resolve(false);
-        });
+        if (retryResult.error) {
+          console.error('[EmailService] Fallback Resend send failed:', retryResult.error);
+          return false;
+        }
 
-        req.write(payload);
-        req.end();
-      });
-    } catch (err) {
-      console.error('[EmailService] Resend dispatch failed:', err);
+        console.log(`[EmailService] OTP email delivered to ${to} via Resend (ID: ${retryResult.data?.id})`);
+        return true;
+      }
       return false;
     }
-  } else {
-    console.warn(`[EmailService] RESEND_API_KEY not configured in env. OTP email to ${to} was logged to database only.`);
+
+    console.log(`[EmailService] OTP email delivered to ${to} via Resend (ID: ${result.data?.id})`);
+    return true;
+  } catch (err) {
+    console.error('[EmailService] Exception during Resend dispatch:', err.message || err);
     return false;
   }
 }
