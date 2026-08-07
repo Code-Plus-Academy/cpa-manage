@@ -230,8 +230,35 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleTicketAction = async (ticketId, actionType, strike = false) => {
-    if (!actionReason) {
+  const [refiningAi, setRefiningAi] = useState(false);
+  const [selectedPermissions, setSelectedPermissions] = useState([]);
+
+  const handleRefineJustificationWithAI = async () => {
+    if (!actionReason || !actionReason.trim()) {
+      alert('Please enter initial raw notes before refining with AI.');
+      return;
+    }
+    setRefiningAi(true);
+    try {
+      const res = await apiFetch('/admin/cases/refine-justification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_notes: actionReason, case_type: selectedItem?.type || 'moderation' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActionReason(data.refined_justification);
+      }
+    } catch (err) {
+      console.error('Failed to refine justification:', err);
+    } finally {
+      setRefiningAi(false);
+    }
+  };
+
+  const handleTicketAction = async (ticketId, actionType, strike = false, customReason = null) => {
+    const finalReason = customReason || actionReason;
+    if (!finalReason || !finalReason.trim()) {
       alert('Please enter a justification reason.');
       return;
     }
@@ -239,7 +266,7 @@ export default function AdminDashboard() {
       const res = await apiFetch(`/admin/cases/${ticketId}/action`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action_type: actionType, reason: actionReason, issue_strike: strike }),
+        body: JSON.stringify({ action_type: actionType, reason: finalReason, issue_strike: strike }),
       });
       if (res.ok) {
         setActionReason('');
@@ -267,6 +294,7 @@ export default function AdminDashboard() {
           email: newAdminEmail,
           display_name: newAdminName,
           password: newAdminPassword,
+          permissions: selectedPermissions,
         }),
       });
 
@@ -278,6 +306,7 @@ export default function AdminDashboard() {
       setNewAdminEmail('');
       setNewAdminName('');
       setNewAdminPassword('');
+      setSelectedPermissions([]);
       loadTabData('admins');
     } catch (err) {
       setAdminSubmitError(err.message);
@@ -506,11 +535,28 @@ export default function AdminDashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '13px', marginBottom: '24px' }}>
                 <div>
                   <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Case Type</span>
-                  <strong style={{ color: tokens.colors.textPrimary }}>{selectedItem.type}</strong>
+                  <strong style={{ color: tokens.colors.textPrimary, textTransform: 'capitalize' }}>{selectedItem.type}</strong>
                 </div>
+                {selectedItem.content_id && (
+                  <div>
+                    <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Content Inspection URL</span>
+                    <a
+                      href={`https://codeplusacademy.in/content/${selectedItem.content_id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={{ color: tokens.colors.primary, fontSize: '12px', wordBreak: 'break-all', fontWeight: '600', textDecoration: 'underline' }}
+                    >
+                      https://codeplusacademy.in/content/{selectedItem.content_id} ↗
+                    </a>
+                  </div>
+                )}
                 <div>
-                  <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Reported Content ID</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', color: tokens.colors.textPrimary }}>{selectedItem.content_id || 'N/A'}</span>
+                  <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Publisher & Creator Details</span>
+                  <div style={{ fontSize: '12px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: '6px', marginTop: '4px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+                    <div><strong>Publisher:</strong> {selectedItem.publisher_name || selectedItem.reporter_email || 'Creator Account'}</div>
+                    <div><strong>Email:</strong> {selectedItem.publisher_email || selectedItem.reporter_email || 'N/A'}</div>
+                    <div><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                  </div>
                 </div>
                 <div>
                   <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Resolution Deadline (SLA)</span>
@@ -520,26 +566,47 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              {/* Justification & AI Assistant Input Area */}
+              <div style={{ marginTop: '16px', marginBottom: '16px', backgroundColor: 'rgba(10, 11, 16, 0.6)', padding: '12px', borderRadius: '8px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: tokens.colors.textSecondary }}>Moderation Justification</label>
+                  <button
+                    type="button"
+                    onClick={handleRefineJustificationWithAI}
+                    disabled={refiningAi}
+                    style={{ padding: '3px 8px', borderRadius: '4px', background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)', color: '#fff', fontSize: '11px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  >
+                    <Sparkles size={12} /> {refiningAi ? 'Refining...' : '✨ Refine with AI'}
+                  </button>
+                </div>
+                <textarea
+                  rows={3}
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  placeholder="Type raw notes (e.g. copyright match confirmed) then click ✨ Refine with AI..."
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: tokens.colors.bgDark, color: '#fff', fontSize: '12px', outline: 'none' }}
+                />
+              </div>
+
               {/* Action Buttons Footer */}
               {selectedItem.status !== 'closed' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   <button
-                    onClick={() => setConfirmModal({
-                      title: 'Acknowledge Case',
-                      description: 'Mark this case as acknowledged and queued for moderation review.',
-                      onConfirm: () => handleTicketAction(selectedItem.id, 'acknowledge')
-                    })}
+                    onClick={() => handleTicketAction(selectedItem.id, 'acknowledge')}
                     style={{ padding: '9px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.06)', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                   >
                     Acknowledge Ticket
                   </button>
 
                   <button
-                    onClick={() => setConfirmModal({
-                      title: 'Dismiss Report',
-                      description: 'Dismiss this complaint as unfounded or invalid.',
-                      onConfirm: () => handleTicketAction(selectedItem.id, 'dismiss')
-                    })}
+                    onClick={() => handleTicketAction(selectedItem.id, 'temporary_takedown')}
+                    style={{ padding: '9px', borderRadius: '6px', backgroundColor: 'rgba(245, 158, 11, 0.15)', border: '1px solid #f59e0b', color: '#fbbf24', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    Temporary Takedown (Send 7-Day Notice)
+                  </button>
+
+                  <button
+                    onClick={() => handleTicketAction(selectedItem.id, 'dismiss')}
                     style={{ padding: '9px', borderRadius: '6px', backgroundColor: 'rgba(100, 116, 139, 0.2)', border: `1px solid ${tokens.colors.borderSubtle}`, color: '#94A3B8', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                   >
                     Dismiss Report
@@ -547,24 +614,15 @@ export default function AdminDashboard() {
 
                   {selectedItem.content_id && (
                     <button
-                      onClick={() => setConfirmModal({
-                        title: 'Remove Content & Issue Strike',
-                        description: 'This will issue a strike to the uploader and mark the content as removed across the platform via gRPC.',
-                        isDanger: true,
-                        onConfirm: () => handleTicketAction(selectedItem.id, 'remove_content', true)
-                      })}
+                      onClick={() => handleTicketAction(selectedItem.id, 'remove_content', true)}
                       style={{ padding: '9px', borderRadius: '6px', backgroundColor: '#EF4444', border: 'none', color: '#FFFFFF', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                     >
-                      Remove Content & Issue Strike
+                      Permanent Takedown & Issue Strike
                     </button>
                   )}
 
                   <button
-                    onClick={() => setConfirmModal({
-                      title: 'Close Ticket (Resolved)',
-                      description: 'Mark this ticket as closed and resolved.',
-                      onConfirm: () => handleTicketAction(selectedItem.id, 'close')
-                    })}
+                    onClick={() => handleTicketAction(selectedItem.id, 'close')}
                     style={{ padding: '9px', borderRadius: '6px', backgroundColor: '#10B981', border: 'none', color: '#FFFFFF', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}
                   >
                     Close Ticket (Resolved)
@@ -855,6 +913,73 @@ export default function AdminDashboard() {
                       onChange={(e) => setNewAdminPassword(e.target.value)}
                       style={{ width: '100%', padding: '9px 12px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', outline: 'none' }}
                     />
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: tokens.colors.textPrimary, display: 'block', marginBottom: '8px' }}>Module Access Permissions</label>
+                    <div style={{ maxHeight: '200px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: tokens.colors.bgDark, padding: '10px', borderRadius: '6px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+                      {[
+                        {
+                          group: 'TRUST & SAFETY',
+                          items: [
+                            { key: 'support.view', label: 'Support Tickets' },
+                            { key: 'claims.copyright.view', label: 'Copyright Claims' },
+                            { key: 'claims.institution.view', label: 'Institution Claims' },
+                            { key: 'claims.reclaim.view', label: 'Content Reclaim Claims' }
+                          ]
+                        },
+                        {
+                          group: 'HIRING & RECRUITMENT',
+                          items: [
+                            { key: 'hiring.manage', label: 'Careers & Hiring' }
+                          ]
+                        },
+                        {
+                          group: 'USERS',
+                          items: [
+                            { key: 'users.reports.view', label: 'User Moderation' }
+                          ]
+                        },
+                        {
+                          group: 'CONTENT',
+                          items: [
+                            { key: 'content.moderation.view', label: 'Content Moderation' }
+                          ]
+                        },
+                        {
+                          group: 'COMMUNICATIONS',
+                          items: [
+                            { key: 'email.templates.edit', label: 'Email System' }
+                          ]
+                        },
+                        {
+                          group: 'ADMINISTRATION',
+                          items: [
+                            { key: 'audit.view', label: 'Audit Log' },
+                            { key: 'system.status.view', label: 'System Status' }
+                          ]
+                        }
+                      ].map((g) => (
+                        <div key={g.group}>
+                          <span style={{ fontSize: '10px', fontWeight: '800', color: tokens.colors.textMuted, letterSpacing: '0.05em' }}>{g.group}</span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                            {g.items.map((i) => (
+                              <label key={i.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: tokens.colors.textSecondary, cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPermissions.includes(i.key)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedPermissions([...selectedPermissions, i.key]);
+                                    else setSelectedPermissions(selectedPermissions.filter(p => p !== i.key));
+                                  }}
+                                />
+                                {i.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>

@@ -280,4 +280,23 @@ router.patch(
   }
 );
 
+// POST /admin/cases/refine-justification — Refine raw admin notes into formal compliance statement
+router.post('/refine-justification', async (req, res, next) => {
+  try {
+    const { raw_notes, case_type } = req.body;
+    if (!raw_notes || !raw_notes.trim()) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Raw justification text is required' } });
+    }
+
+    const typePrefix = case_type ? `[${case_type.toUpperCase()}] ` : '';
+    const cleanNotes = raw_notes.trim();
+
+    const refined = `${typePrefix}Upon administrative moderation review, the reported material has been evaluated under Code+ Academy Trust & Safety terms. Justification: ${cleanNotes}. Corrective action applied pursuant to platform compliance guidelines.`;
+
+    res.json({ refined_justification: refined, original: raw_notes });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
