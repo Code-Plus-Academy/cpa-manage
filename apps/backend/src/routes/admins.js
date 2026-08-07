@@ -56,13 +56,17 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
 
     const passwordHash = await bcrypt.hash(password, 12);
 
+    // Generate 6-digit OTP for Worker Admin registration workflow
+    const otpCode = String(Math.floor(100000 + Math.random() * 900000));
+    const otpExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO admin_users (email, password_hash, display_name, is_root, status, created_by)
-       VALUES ($1, $2, $3, false, 'active', $4)
+      `INSERT INTO admin_users (email, password_hash, display_name, is_root, status, registration_otp, registration_otp_expires_at, created_by)
+       VALUES ($1, $2, $3, false, 'pending_verification', $4, $5, $6)
        RETURNING id, email, display_name, is_root, status, created_at`,
-      [email.toLowerCase().trim(), passwordHash, display_name, req.adminUser.id]
+      [email.toLowerCase().trim(), passwordHash, display_name, otpCode, otpExpiresAt, req.adminUser.id]
     );
 
     const newAdmin = rows[0];
@@ -79,21 +83,48 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
       );
     }
 
+    // Record Registration OTP Email dispatch
+    const subject = `[Code+ Academy] Complete Your Worker Admin Registration - Verification OTP: ${otpCode}`;
+    const bodyHtml = `
+      <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+        <h2 style="color: #6366f1;">Worker Admin Account Registration</h2>
+        <p>Hello ${display_name},</p>
+        <p>You have been invited to join the Code+ Academy Administration console as a Worker Admin.</p>
+        <p>Your 6-digit One-Time Registration Passcode (OTP) is:</p>
+        <div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">
+          ${otpCode}
+        </div>
+        <p style="font-size: 12px; color: #6b7280;">This OTP will expire in 15 minutes.</p>
+        <p>Best regards,<br/>Code+ Academy Administration</p>
+      </div>
+    `;
+
+    await client.query(
+      `INSERT INTO email_sends (template_key, user_id, recipient_email, subject, body_html, status, sent_at)
+       VALUES ('admin_registration_otp', $1, $2, $3, $4, 'sent', NOW())`,
+      [newAdmin.id, email.toLowerCase().trim(), subject, bodyHtml]
+    );
+
     // Same-transaction audit log (Ground Rule 6)
     await writeAuditLog(client, {
       actorAdminId: req.adminUser.id,
       actorIsRoot: true,
       permissionUsed: 'admin.manage',
       module: 'admin',
-      action: 'admin.create',
+      action: 'admin.create_otp_sent',
       targetType: 'admin_user',
       targetId: String(newAdmin.id),
-      reason: `Created worker admin account for ${email} with permissions [${validPerms.join(', ')}]`,
+      reason: `Created worker admin account for ${email} (status: pending_verification, OTP sent)`,
     });
 
     await client.query('COMMIT');
 
-    res.status(201).json({ admin_user: { ...newAdmin, permissions: validPerms } });
+    res.status(201).json({
+      admin_user: { ...newAdmin, permissions: validPerms },
+      otp_sent: true,
+      otp_code: otpCode,
+      message: `Worker admin invited. Registration OTP sent to ${email}.`,
+    });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

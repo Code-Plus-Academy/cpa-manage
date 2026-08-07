@@ -23,7 +23,7 @@ export default function StandaloneEmailPage() {
   const [analytics, setAnalytics] = useState(null);
   const [sends, setSends] = useState([]);
 
-  // Template Modal Form
+  // Template Modal States
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState(null); // null for create, template obj for edit
   const [templateKey, setTemplateKey] = useState('');
@@ -32,6 +32,25 @@ export default function StandaloneEmailPage() {
   const [subjectTemplate, setSubjectTemplate] = useState('');
   const [bodyHtmlTemplate, setBodyHtmlTemplate] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
+  const [previewHtmlModal, setPreviewHtmlModal] = useState(null);
+
+  const handleDeleteTemplate = async (key) => {
+    if (!confirm(`Are you sure you want to delete template '${key}'?`)) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/email/templates/${key}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        loadSubTabData('templates');
+      } else {
+        const data = await res.json();
+        alert(data.error?.message || data.message || 'Failed to delete template');
+      }
+    } catch (err) {
+      alert('Error deleting template');
+    }
+  };
 
   // Campaign Modal Form
   const [showCampaignModal, setShowCampaignModal] = useState(false);
@@ -356,12 +375,29 @@ export default function StandaloneEmailPage() {
                         <td style={{ padding: '12px 16px' }}>v{t.version}</td>
                         <td style={{ padding: '12px 16px' }}><StatusPill status={t.is_active ? 'approved' : 'dismissed'} /></td>
                         <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                          <button
-                            onClick={() => openEditTemplateModal(t)}
-                            style={{ padding: '4px 10px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                          >
-                            <Edit3 size={12} /> Edit
-                          </button>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => setPreviewHtmlModal(t.body_html_template)}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: '#38bdf8', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Preview Live HTML"
+                            >
+                              <Eye size={12} /> Preview
+                            </button>
+                            <button
+                              onClick={() => openEditTemplateModal(t)}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Edit Template"
+                            >
+                              <Edit3 size={12} /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTemplate(t.key)}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              title="Delete Template"
+                            >
+                              <X size={12} /> Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -526,7 +562,7 @@ export default function StandaloneEmailPage() {
         {/* Template Modal */}
         {showTemplateModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ width: '100%', maxWidth: '640px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+            <div style={{ width: '100%', maxWidth: '680px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>
                   {editingTemplate ? 'Edit Email Template' : 'Create Email Template'}
@@ -558,17 +594,49 @@ export default function StandaloneEmailPage() {
                   <input type="text" required value={subjectTemplate} onChange={(e) => setSubjectTemplate(e.target.value)} placeholder="Welcome to CPA, {{user_name}}!" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>HTML Body Template</label>
-                  <textarea required rows={5} value={bodyHtmlTemplate} onChange={(e) => setBodyHtmlTemplate(e.target.value)} placeholder="<h1>Welcome {{user_name}}</h1><p>Thank you for joining Code Plus Academy.</p>" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', resize: 'vertical' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <label style={{ fontSize: '12px', color: tokens.colors.textMuted }}>HTML Body Template</label>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {['{{ user_name }}', '{{ action_link }}', '{{ content_title }}', '{{ reason }}', '{{ date }}'].map(tag => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setBodyHtmlTemplate(prev => `${prev} ${tag}`)}
+                          style={{ padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(99, 102, 241, 0.2)', border: 'none', color: '#818cf8', fontSize: '11px', cursor: 'pointer', fontFamily: 'monospace' }}
+                        >
+                          + {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea required rows={7} value={bodyHtmlTemplate} onChange={(e) => setBodyHtmlTemplate(e.target.value)} placeholder="<h1>Welcome {{user_name}}</h1><p>Thank you for joining Code Plus Academy.</p>" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', resize: 'vertical', fontFamily: 'monospace' }} />
                 </div>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: tokens.colors.textPrimary, cursor: 'pointer' }}>
                   <input type="checkbox" checked={templateActive} onChange={(e) => setTemplateActive(e.target.checked)} />
                   <span>Is Active</span>
                 </label>
-                <button type="submit" disabled={submitting} style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                  {submitting ? 'Saving Template...' : 'Save Email Template'}
-                </button>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" onClick={() => setPreviewHtmlModal(bodyHtmlTemplate)} style={{ flex: 1, padding: '10px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: '#FFFFFF', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                    Preview Live HTML
+                  </button>
+                  <button type="submit" disabled={submitting} style={{ flex: 1, padding: '10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+                    {submitting ? 'Saving Template...' : 'Save Email Template'}
+                  </button>
+                </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Live HTML Preview Modal Overlay */}
+        {previewHtmlModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+            <div style={{ width: '100%', maxWidth: '750px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#111827', margin: 0 }}>Live Email Render Preview</h3>
+                <button onClick={() => setPreviewHtmlModal(null)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>Close Preview</button>
+              </div>
+              <div dangerouslySetInnerHTML={{ __html: previewHtmlModal.replace(/\{\{\s*user_name\s*\}\}/g, 'Alex Turner').replace(/\{\{\s*action_link\s*\}\}/g, 'https://codeplusacademy.in/action').replace(/\{\{\s*date\s*\}\}/g, new Date().toLocaleDateString()) }} />
             </div>
           </div>
         )}

@@ -221,4 +221,55 @@ router.post('/logout', async (req, res, next) => {
   }
 });
 
+// POST /admin/auth/verify-worker-otp — Complete worker admin registration with 6-digit OTP
+router.post('/verify-worker-otp', async (req, res, next) => {
+  try {
+    const { email, otp_code, set_password } = req.body;
+
+    if (!email || !otp_code) {
+      return next(new AppError('VALIDATION_ERROR', 400, { fields: { email: !email ? 'required' : undefined, otp_code: !otp_code ? 'required' : undefined } }));
+    }
+
+    const { rows } = await query(
+      `SELECT id, email, display_name, is_root, status, registration_otp, registration_otp_expires_at
+       FROM admin_users WHERE LOWER(email) = LOWER($1)`,
+      [email.toLowerCase().trim()]
+    );
+
+    if (rows.length === 0) {
+      return next(new AppError('NOT_FOUND', 404, null, 'Admin user not found.'));
+    }
+
+    const admin = rows[0];
+
+    if (admin.registration_otp !== otp_code.trim()) {
+      return next(new AppError('INVALID_OTP', 400, null, 'Invalid registration OTP code.'));
+    }
+
+    if (new Date(admin.registration_otp_expires_at) < new Date()) {
+      return next(new AppError('EXPIRED_OTP', 400, null, 'Registration OTP has expired. Please ask Superadmin to resend.'));
+    }
+
+    let passwordHashUpdate = '';
+    let values = ['active', admin.id];
+    if (set_password) {
+      const bcrypt = require('bcryptjs');
+      const hash = await bcrypt.hash(set_password, 12);
+      passwordHashUpdate = ', password_hash = $3';
+      values.push(hash);
+    }
+
+    await query(
+      `UPDATE admin_users
+       SET status = $1, registration_otp = NULL, registration_otp_expires_at = NULL ${passwordHashUpdate}
+       WHERE id = $2`,
+      values
+    );
+
+    res.json({ message: 'Worker admin registration verified and account activated successfully.' });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;
