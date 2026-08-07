@@ -243,15 +243,18 @@ router.patch('/positions/:id/archive', async (req, res, next) => {
   }
 });
 
-/**
- * @deprecated Use PATCH /positions/:id/archive instead.
- * Temporary backward compatibility alias.
- */
+// DELETE /positions/:id — Delete position
 router.delete('/positions/:id', async (req, res, next) => {
-  res.setHeader('Deprecation', 'true');
-  res.setHeader('Link', '</positions/' + req.params.id + '/archive>; rel="successor-version"');
-  req.url = `/positions/${req.params.id}/archive`;
-  router.handle(req, res, next);
+  try {
+    const { id } = req.params;
+    const result = await query(`DELETE FROM hiring_positions WHERE id = $1 RETURNING *`, [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Position not found' } });
+    }
+    res.json({ message: 'Position deleted successfully', position: result.rows[0] });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // ─── 2. CANDIDATE & APPLICATION PIPELINE ──────────────────────────────────────
@@ -970,6 +973,51 @@ router.get('/analytics/overview', async (req, res, next) => {
       approved_this_month: approvedCount.rows[0].count,
       funnel: funnelRes.rows
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /analytics/position-wise — Per-position funnel breakdown & conversion metrics
+router.get('/analytics/position-wise', async (req, res, next) => {
+  try {
+    const result = await query(
+      `SELECT p.id AS position_id, p.title AS position_title, p.department, p.status AS position_status,
+              COUNT(a.id)::int AS total_applications,
+              COUNT(CASE WHEN a.status = 'applied' THEN 1 END)::int AS applied_count,
+              COUNT(CASE WHEN a.status = 'in_review' THEN 1 END)::int AS in_review_count,
+              COUNT(CASE WHEN a.status = 'interview' THEN 1 END)::int AS interview_count,
+              COUNT(CASE WHEN a.status = 'approved' THEN 1 END)::int AS approved_count,
+              COUNT(CASE WHEN a.status = 'rejected' THEN 1 END)::int AS rejected_count
+       FROM hiring_positions p
+       LEFT JOIN hiring_applications a ON a.position_id = p.id
+       GROUP BY p.id, p.title, p.department, p.status
+       ORDER BY total_applications DESC`
+    );
+    res.json({ position_analytics: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /settings/import-defaults — Reset / populate branding & default sender settings from process.env
+router.post('/settings/import-defaults', async (req, res, next) => {
+  try {
+    const defaultEmail = process.env.DEFAULT_SENDER_EMAIL || 'careers@codeplusacademy.in';
+    const defaultName = process.env.DEFAULT_SENDER_NAME || 'Code+ Academy Careers';
+    const logoUrl = process.env.COMPANY_LOGO_URL || 'https://codeplusacademy.in/cpa-logo-dark.png';
+
+    const result = await query(
+      `UPDATE hiring_settings SET
+        default_sender_email = $1,
+        default_sender_name = $2,
+        company_logo_url = $3,
+        updated_at = NOW()
+       WHERE id = 1 RETURNING *`,
+      [defaultEmail, defaultName, logoUrl]
+    );
+
+    res.json({ message: 'Branding settings reset to system defaults from .env', settings: result.rows[0] });
   } catch (error) {
     next(error);
   }
