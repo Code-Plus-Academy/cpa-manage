@@ -257,17 +257,50 @@ router.patch(
 
       await client.query('COMMIT');
 
-      // gRPC content status update if content removal approved
+      // gRPC content status update with HTTP fallback if content removal approved
       if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && ticket.content_id && ticket.content_type) {
+        const newStatusPayload = action_type === 'temporary_takedown' ? 'temporarily_removed' : 'removed';
+        let setStatusOk = false;
+
         try {
-          await contentActionsClient.setContentStatus({
+          const res = await contentActionsClient.setContentStatus({
             ref: { content_type: ticket.content_type, content_id: String(ticket.content_id) },
-            new_status: action_type === 'temporary_takedown' ? 'temporarily_removed' : 'removed',
+            new_status: newStatusPayload,
             reason,
             actor_admin_id: req.adminUser.id,
           });
+          if (res && res.success) {
+            setStatusOk = true;
+          }
         } catch (grpcErr) {
-          console.warn('[gRPC SetContentStatus call failed]:', grpcErr.message);
+          console.warn('[gRPC SetContentStatus call failed]:', grpcErr.message, '— attempting HTTP fallback...');
+        }
+
+        if (!setStatusOk) {
+          try {
+            const mainBackendUrl = process.env.MAIN_BACKEND_URL;
+            if (mainBackendUrl) {
+              const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
+              const fetch = require('node-fetch');
+              await fetch(`${mainBackendUrl}/api/internal/set-content-status`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
+                },
+                body: JSON.stringify({
+                  content_type: ticket.content_type,
+                  content_id: String(ticket.content_id),
+                  new_status: newStatusPayload,
+                  reason,
+                  actor_admin_id: req.adminUser.id,
+                }),
+              });
+              console.info('[HTTP SetContentStatus] Successfully updated content status on main backend via HTTP');
+            }
+          } catch (httpErr) {
+            console.error('[HTTP SetContentStatus Failed]:', httpErr.message);
+          }
         }
       }
 
