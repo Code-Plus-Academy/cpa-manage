@@ -1,59 +1,57 @@
 /**
  * Email Dispatcher Service — cpa-manage backend.
- * Dispatches real emails via official Resend SDK with automatic fallback and error reporting.
+ * Delegates physical email dispatching to CPA Main Backend's smart dual-provider email service.
  */
-const { Resend } = require('resend');
+const https = require('https');
+const http = require('http');
 
-async function sendMail({ to, subject, html }) {
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.warn('[EmailService] WARN: Neither EMAIL_PROVIDER_API_KEY nor RESEND_API_KEY is set in environment variables on Render. Email dispatch skipped.');
-    return false;
-  }
+async function sendMail({ to, subject, html, from }) {
+  const mainBackendUrl = process.env.MAIN_BACKEND_URL || 'https://backend.codeplusacademy.in';
+  const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
 
-  console.log(`[EmailService] Initiating email dispatch to: ${to} (Subject: "${subject}")`);
-
-  const resend = new Resend(apiKey);
-  const configuredFrom = process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_FROM_AUTH || process.env.EMAIL_FROM_SYSTEM || 'notifications@codeplusacademy.in';
-  const fromAddress = configuredFrom.includes('<') ? configuredFrom : `Code+ Academy Admin <${configuredFrom}>`;
+  console.log(`[EmailService] Delegating email dispatch to Main Backend (${mainBackendUrl}/api/internal/send-email) for recipient: ${to}`);
 
   try {
-    console.log(`[EmailService] Sending via Resend from: ${fromAddress}`);
-    const result = await resend.emails.send({
-      from: fromAddress,
-      to: [to],
-      subject,
-      html,
-    });
+    const targetUrl = new URL('/api/internal/send-email', mainBackendUrl);
+    const payload = JSON.stringify({ to, subject, html, from });
+    const isHttps = targetUrl.protocol === 'https:';
+    const clientModule = isHttps ? https : http;
 
-    if (result.error) {
-      console.error('[EmailService] Resend Primary Send Error:', JSON.stringify(result.error));
-
-      // Automatic fallback to Resend testing sender if custom domain is unverified
-      if (!fromAddress.includes('onboarding@resend.dev')) {
-        console.info('[EmailService] Retrying send via onboarding@resend.dev fallback...');
-        const retryResult = await resend.emails.send({
-          from: 'Code+ Academy <onboarding@resend.dev>',
-          to: [to],
-          subject,
-          html,
+    return new Promise((resolve) => {
+      const req = clientModule.request({
+        hostname: targetUrl.hostname,
+        port: targetUrl.port || (isHttps ? 443 : 80),
+        path: targetUrl.pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
+          'Content-Length': Buffer.byteLength(payload),
+        },
+      }, (res) => {
+        let body = '';
+        res.on('data', chunk => body += chunk);
+        res.on('end', () => {
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            console.log(`[EmailService] SUCCESS: Main Backend accepted and delivered email to ${to}`);
+            resolve(true);
+          } else {
+            console.error(`[EmailService] Main Backend email dispatch failed (HTTP ${res.statusCode}): ${body}`);
+            resolve(false);
+          }
         });
+      });
 
-        if (retryResult.error) {
-          console.error('[EmailService] Resend Fallback Send Error:', JSON.stringify(retryResult.error));
-          return false;
-        }
+      req.on('error', (err) => {
+        console.error(`[EmailService] Network error calling Main Backend email service at ${mainBackendUrl}:`, err.message || err);
+        resolve(false);
+      });
 
-        console.log(`[EmailService] SUCCESS: Email delivered to ${to} via onboarding@resend.dev (Resend ID: ${retryResult.data?.id})`);
-        return true;
-      }
-      return false;
-    }
-
-    console.log(`[EmailService] SUCCESS: Email delivered to ${to} (Resend ID: ${result.data?.id})`);
-    return true;
+      req.write(payload);
+      req.end();
+    });
   } catch (err) {
-    console.error('[EmailService] Exception during Resend dispatch:', err.message || err);
+    console.error('[EmailService] Exception delegating email to Main Backend:', err.message || err);
     return false;
   }
 }
