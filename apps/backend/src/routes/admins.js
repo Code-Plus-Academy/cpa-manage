@@ -9,6 +9,7 @@ const { query, getClient } = require('../config/db');
 const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
+const { sendMail } = require('../services/emailService');
 
 // ─── GET /admin/admins ─────────────────────────────────────────────────────────
 router.get('/', requirePermission.rootOnly, async (req, res, next) => {
@@ -83,9 +84,9 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
       );
     }
 
-    // Record Registration OTP Email dispatch
-    const subject = `[Code+ Academy] Complete Your Worker Admin Registration - Verification OTP: ${otpCode}`;
-    const bodyHtml = `
+    // Fetch customizable template from email_templates table if available
+    let subject = `[Code+ Academy] Complete Your Worker Admin Registration - Verification OTP: ${otpCode}`;
+    let bodyHtml = `
       <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
         <h2 style="color: #6366f1;">Worker Admin Account Registration</h2>
         <p>Hello ${display_name},</p>
@@ -98,6 +99,23 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
         <p>Best regards,<br/>Code+ Academy Administration</p>
       </div>
     `;
+
+    const { rows: tplRows } = await client.query(
+      `SELECT subject_template, body_html_template FROM email_templates WHERE key = 'admin_registration_otp' AND is_active = true`
+    );
+
+    if (tplRows.length > 0) {
+      const { subject_template, body_html_template } = tplRows[0];
+      subject = subject_template
+        .replace(/\{\{\s*display_name\s*\}\}/g, display_name)
+        .replace(/\{\{\s*otp_code\s*\}\}/g, otpCode)
+        .replace(/\{\{\s*expires_minutes\s*\}\}/g, '15');
+
+      bodyHtml = body_html_template
+        .replace(/\{\{\s*display_name\s*\}\}/g, display_name)
+        .replace(/\{\{\s*otp_code\s*\}\}/g, otpCode)
+        .replace(/\{\{\s*expires_minutes\s*\}\}/g, '15');
+    }
 
     await client.query(
       `INSERT INTO email_sends (template_key, user_id, recipient_email, subject, body_html, status, sent_at)
@@ -119,10 +137,16 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
 
     await client.query('COMMIT');
 
+    // Asynchronously dispatch physical email via Resend API / SMTP
+    sendMail({
+      to: email.toLowerCase().trim(),
+      subject,
+      html: bodyHtml,
+    }).catch(err => console.error('[admins.js] Failed to send email out:', err));
+
     res.status(201).json({
       admin_user: { ...newAdmin, permissions: validPerms },
       otp_sent: true,
-      otp_code: otpCode,
       message: `Worker admin invited. Registration OTP sent to ${email}.`,
     });
   } catch (err) {
@@ -199,6 +223,110 @@ router.patch('/:id/permissions', requirePermission.rootOnly, async (req, res, ne
       admin_user_id: targetAdmin.id,
       permissions: updatedPerms.map(r => r.permission_key),
     });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+// ─── PUT /admin/admins/:id/permissions (Overwrite permissions) ──────────────────
+router.put('/:id/permissions', requirePermission.rootOnly, async (req, res, next) => {
+  const client = await getClient();
+  try {
+    const { id } = req.params;
+    const { permissions = [] } = req.body;
+
+    const { rows } = await query('SELECT id, email, is_root FROM admin_users WHERE id::text = $1', [id]);
+    if (rows.length === 0) {
+      return next(new AppError('NOT_FOUND', 404, null, 'Admin user not found.'));
+    }
+
+    const targetAdmin = rows[0];
+    if (targetAdmin.is_root) {
+      return next(new AppError('CONFLICT', 409, null, 'Cannot modify permissions for a root administrator account.'));
+    }
+
+    const validPerms = (Array.isArray(permissions) ? permissions : []).filter(p => p !== 'admin.manage');
+
+    await client.query('BEGIN');
+
+    // Wipe existing permissions
+    await client.query('DELETE FROM admin_user_permissions WHERE admin_user_id = $1', [targetAdmin.id]);
+
+    // Insert new set of permissions
+    for (const key of validPerms) {
+      await client.query(
+        `INSERT INTO admin_user_permissions (admin_user_id, permission_key, granted_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (admin_user_id, permission_key) DO NOTHING`,
+        [targetAdmin.id, key, req.adminUser.id]
+      );
+    }
+
+    await writeAuditLog(client, {
+      actorAdminId: req.adminUser.id,
+      actorIsRoot: true,
+      permissionUsed: 'admin.manage',
+      module: 'admin',
+      action: 'admin.permissions_set',
+      targetType: 'admin_user',
+      targetId: String(targetAdmin.id),
+      reason: `Set permissions to [${validPerms.join(', ')}]`,
+    });
+
+    await client.query('COMMIT');
+
+    res.json({
+      admin_user_id: targetAdmin.id,
+      permissions: validPerms,
+      message: 'Worker admin permissions updated successfully.',
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// ─── DELETE /admin/admins/:id (Delete worker admin) ────────────────────────────
+router.delete('/:id', requirePermission.rootOnly, async (req, res, next) => {
+  const client = await getClient();
+  try {
+    const { id } = req.params;
+
+    const { rows } = await query('SELECT id, email, is_root FROM admin_users WHERE id::text = $1', [id]);
+    if (rows.length === 0) {
+      return next(new AppError('NOT_FOUND', 404, null, 'Admin user not found.'));
+    }
+
+    const targetAdmin = rows[0];
+    if (targetAdmin.is_root) {
+      return next(new AppError('FORBIDDEN', 403, null, 'Root administrator account cannot be deleted.'));
+    }
+
+    if (targetAdmin.id === req.adminUser.id) {
+      return next(new AppError('CONFLICT', 409, null, 'You cannot delete your own admin account while logged in.'));
+    }
+
+    await client.query('BEGIN');
+
+    // Delete permissions and admin user
+    await client.query('DELETE FROM admin_user_permissions WHERE admin_user_id = $1', [targetAdmin.id]);
+    await client.query('DELETE FROM admin_sessions WHERE admin_user_id = $1', [targetAdmin.id]);
+    await client.query('DELETE FROM admin_users WHERE id = $1', [targetAdmin.id]);
+
+    await writeAuditLog(client, {
+      actorAdminId: req.adminUser.id,
+      actorIsRoot: true,
+      permissionUsed: 'admin.manage',
+      module: 'admin',
+      action: 'admin.delete_account',
+      targetType: 'admin_user',
+      targetId: String(targetAdmin.id),
+      reason: `Deleted worker admin account for ${targetAdmin.email}`,
+    });
+
+    await client.query('COMMIT');
+
+    res.json({ message: `Worker admin account ${targetAdmin.email} deleted successfully.` });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

@@ -54,6 +54,21 @@ export default function AdminDashboard() {
   const [adminSubmitError, setAdminSubmitError] = useState(null);
   const [adminSubmitting, setAdminSubmitting] = useState(false);
 
+  // OTP Verification Modal state
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpVerifyEmail, setOtpVerifyEmail] = useState('');
+  const [otpInputCode, setOtpInputCode] = useState('');
+  const [otpSubmitError, setOtpSubmitError] = useState(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpSuccessMsg, setOtpSuccessMsg] = useState(null);
+
+  // Edit & Delete Worker Admin state
+  const [editingAdmin, setEditingAdmin] = useState(null);
+  const [editAdminPermissions, setEditAdminPermissions] = useState([]);
+  const [editAdminSubmitting, setEditAdminSubmitting] = useState(false);
+  const [deletingAdmin, setDeletingAdmin] = useState(null);
+  const [deleteAdminSubmitting, setDeleteAdminSubmitting] = useState(false);
+
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   const apiFetch = async (path, options = {}) => {
@@ -303,6 +318,12 @@ export default function AdminDashboard() {
         throw new Error(data.message || data.error?.message || 'Failed to create worker admin');
       }
       setShowCreateAdminModal(false);
+      setOtpVerifyEmail(newAdminEmail);
+      setOtpInputCode('');
+      setOtpSubmitError(null);
+      setOtpSuccessMsg(null);
+      setShowOtpModal(true);
+
       setNewAdminEmail('');
       setNewAdminName('');
       setNewAdminPassword('');
@@ -312,6 +333,84 @@ export default function AdminDashboard() {
       setAdminSubmitError(err.message);
     } finally {
       setAdminSubmitting(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setOtpSubmitError(null);
+    setOtpSuccessMsg(null);
+    setOtpSubmitting(true);
+    try {
+      const res = await apiFetch('/admin/auth/verify-worker-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: otpVerifyEmail,
+          otp_code: otpInputCode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || data.error?.message || 'Invalid OTP code');
+      }
+      setOtpSuccessMsg('Worker Admin account activated successfully!');
+      setTimeout(() => {
+        setShowOtpModal(false);
+        setOtpInputCode('');
+        setOtpSuccessMsg(null);
+        loadTabData('admins');
+      }, 1500);
+    } catch (err) {
+      setOtpSubmitError(err.message);
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  const handleUpdateAdminPermissions = async (e) => {
+    e.preventDefault();
+    if (!editingAdmin) return;
+    setEditAdminSubmitting(true);
+    try {
+      const res = await apiFetch(`/admin/admins/${editingAdmin.id}/permissions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissions: editAdminPermissions }),
+      });
+      if (res.ok) {
+        setEditingAdmin(null);
+        setEditAdminPermissions([]);
+        loadTabData('admins');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || errData.error?.message || 'Failed to update permissions');
+      }
+    } catch (err) {
+      alert(err.message || 'Network error updating permissions');
+    } finally {
+      setEditAdminSubmitting(false);
+    }
+  };
+
+  const handleDeleteWorkerAdmin = async () => {
+    if (!deletingAdmin) return;
+    setDeleteAdminSubmitting(true);
+    try {
+      const res = await apiFetch(`/admin/admins/${deletingAdmin.id}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setDeletingAdmin(null);
+        loadTabData('admins');
+      } else {
+        const errData = await res.json();
+        alert(errData.message || errData.error?.message || 'Failed to delete worker admin');
+      }
+    } catch (err) {
+      alert(err.message || 'Network error deleting worker admin');
+    } finally {
+      setDeleteAdminSubmitting(false);
     }
   };
 
@@ -735,6 +834,7 @@ export default function AdminDashboard() {
                       <th>Role</th>
                       <th>Status</th>
                       <th>Permissions</th>
+                      <th style={{ textAlign: 'right' }}>Actions</th>
                     </tr>
                   ) : (
                     <tr>
@@ -810,7 +910,7 @@ export default function AdminDashboard() {
                   ) : activeTab === 'admins' ? (
                     adminsList.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '48px', color: tokens.colors.textMuted }}>
                           No admin users found.
                         </td>
                       </tr>
@@ -828,6 +928,29 @@ export default function AdminDashboard() {
                           <td><StatusPill status={a.status} /></td>
                           <td style={{ fontSize: '11px', color: tokens.colors.textMuted }}>
                             {a.permissions?.includes('*') ? 'All Permissions (*)' : `${a.permissions?.length || 0} granted`}
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            {!a.is_root && adminUser?.is_root && (
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAdmin(a);
+                                    setEditAdminPermissions(a.permissions || []);
+                                  }}
+                                  style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', color: '#818CF8', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                                >
+                                  Edit Perms
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingAdmin(a)}
+                                  style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#F87171', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))
@@ -1013,6 +1136,199 @@ export default function AdminDashboard() {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* OTP VERIFICATION MODAL */}
+          {showOtpModal && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+              <div style={{ maxWidth: '420px', width: '100%', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '6px' }}>Verify Worker Admin OTP</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textSecondary, marginBottom: '16px' }}>
+                  A 6-digit registration OTP has been sent to <strong>{otpVerifyEmail}</strong>. Please enter the passcode below to activate the account.
+                </p>
+
+                {otpSubmitError && (
+                  <div style={{ backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', color: '#F87171', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                    {otpSubmitError}
+                  </div>
+                )}
+
+                {otpSuccessMsg && (
+                  <div style={{ backgroundColor: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#34D399', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px' }}>
+                    {otpSuccessMsg}
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textSecondary, display: 'block', marginBottom: '4px' }}>Enter 6-Digit OTP Code</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={6}
+                      placeholder="e.g. 123456"
+                      value={otpInputCode}
+                      onChange={(e) => setOtpInputCode(e.target.value)}
+                      style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '16px', fontFamily: 'JetBrains Mono, monospace', letterSpacing: '4px', textAlign: 'center', outline: 'none' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowOtpModal(false)}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textSecondary, fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      Close & Verify Later
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={otpSubmitting}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      {otpSubmitting ? 'Verifying...' : 'Verify & Activate Account'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* EDIT WORKER ADMIN PERMISSIONS MODAL */}
+          {editingAdmin && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+              <div style={{ maxWidth: '440px', width: '100%', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '4px' }}>Edit Permissions</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textSecondary, marginBottom: '16px' }}>
+                  Update access permissions for <strong>{editingAdmin.display_name}</strong> ({editingAdmin.email})
+                </p>
+
+                <form onSubmit={handleUpdateAdminPermissions} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: tokens.colors.textPrimary, display: 'block', marginBottom: '8px' }}>Module Access Permissions</label>
+                    <div style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: tokens.colors.bgDark, padding: '10px', borderRadius: '6px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+                      {[
+                        {
+                          group: 'TRUST & SAFETY',
+                          items: [
+                            { key: 'support.view', label: 'Support Tickets' },
+                            { key: 'claims.copyright.view', label: 'Copyright Claims' },
+                            { key: 'claims.institution.view', label: 'Institution Claims' },
+                            { key: 'claims.reclaim.view', label: 'Content Reclaim Claims' }
+                          ]
+                        },
+                        {
+                          group: 'HIRING & RECRUITMENT',
+                          items: [
+                            { key: 'hiring.manage', label: 'Careers & Hiring' }
+                          ]
+                        },
+                        {
+                          group: 'USERS',
+                          items: [
+                            { key: 'users.reports.view', label: 'User Moderation' }
+                          ]
+                        },
+                        {
+                          group: 'CONTENT',
+                          items: [
+                            { key: 'content.moderation.view', label: 'Content Moderation' }
+                          ]
+                        },
+                        {
+                          group: 'COMMUNICATIONS',
+                          items: [
+                            { key: 'email.templates.edit', label: 'Email System' }
+                          ]
+                        },
+                        {
+                          group: 'ADMINISTRATION',
+                          items: [
+                            { key: 'audit.view', label: 'Audit Log' },
+                            { key: 'system.status.view', label: 'System Status' }
+                          ]
+                        }
+                      ].map((g) => (
+                        <div key={g.group}>
+                          <span style={{ fontSize: '10px', fontWeight: '800', color: tokens.colors.textMuted, letterSpacing: '0.05em' }}>{g.group}</span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '4px' }}>
+                            {g.items.map((i) => (
+                              <label key={i.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: tokens.colors.textSecondary, cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editAdminPermissions.includes(i.key)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setEditAdminPermissions([...editAdminPermissions, i.key]);
+                                    else setEditAdminPermissions(editAdminPermissions.filter(p => p !== i.key));
+                                  }}
+                                />
+                                {i.label}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '12px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setEditingAdmin(null)}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textSecondary, fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editAdminSubmitting}
+                      style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
+                    >
+                      {editAdminSubmitting ? 'Saving...' : 'Save Permissions'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* DELETE WORKER ADMIN CONFIRMATION MODAL */}
+          {deletingAdmin && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+              <div style={{ maxWidth: '400px', width: '100%', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '14px' }}>
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <AlertTriangle size={20} color="#EF4444" />
+                  </div>
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: tokens.colors.textPrimary }}>Delete Worker Admin</h3>
+                    <span style={{ fontSize: '12px', color: tokens.colors.textMuted }}>Permanent Revocation</span>
+                  </div>
+                </div>
+
+                <p style={{ fontSize: '13px', color: tokens.colors.textSecondary, lineHeight: '1.5', marginBottom: '20px' }}>
+                  Are you sure you want to delete worker admin <strong>{deletingAdmin.display_name}</strong> ({deletingAdmin.email})? This will revoke all their permissions and terminate active sessions immediately.
+                </p>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDeletingAdmin(null)}
+                    style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textSecondary, fontSize: '13px', cursor: 'pointer' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={deleteAdminSubmitting}
+                    onClick={handleDeleteWorkerAdmin}
+                    style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: '#EF4444', border: 'none', color: '#FFFFFF', fontWeight: '600', fontSize: '13px', cursor: 'pointer' }}
+                  >
+                    {deleteAdminSubmitting ? 'Deleting...' : 'Delete Admin'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
