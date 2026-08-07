@@ -52,4 +52,5 @@ module.exports = {
   setContentStatus: (req) => wrapCall('setContentStatus', req, 10000),
   transferOwnership: (req) => wrapCall('transferOwnership', req, 10000),
   findContentBySourceUrl: (query) => wrapCall('findContentBySourceUrl', query, 5000),
+  sendEmail: (req) => wrapCall('sendEmail', req, 10000),
 };
