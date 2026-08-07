@@ -198,7 +198,7 @@ router.patch(
       let requiredPerm = null;
       if (['acknowledge', 'dismiss', 'close'].includes(action_type)) {
         requiredPerm = 'support.respond';
-      } else if (action_type === 'remove_content') {
+      } else if (['remove_content', 'temporary_takedown'].includes(action_type)) {
         requiredPerm = 'content.remove';
       } else if (action_type === 'approve_claim' && ticket.type === 'copyright') {
         requiredPerm = 'claims.copyright.approve';
@@ -223,6 +223,7 @@ router.patch(
       // Map ticket status
       let newStatus = ticket.status;
       if (action_type === 'acknowledge') newStatus = 'acknowledged';
+      else if (action_type === 'temporary_takedown') newStatus = 'temporary_takedown';
       else if (['remove_content', 'approve_claim', 'transfer_ownership'].includes(action_type)) newStatus = 'action_taken';
       else if (['dismiss', 'reject_claim'].includes(action_type)) newStatus = 'dismissed';
       else if (action_type === 'close') newStatus = 'closed';
@@ -257,11 +258,11 @@ router.patch(
       await client.query('COMMIT');
 
       // gRPC content status update if content removal approved
-      if (['remove_content', 'approve_claim'].includes(action_type) && ticket.content_id && ticket.content_type) {
+      if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && ticket.content_id && ticket.content_type) {
         try {
           await contentActionsClient.setContentStatus({
             ref: { content_type: ticket.content_type, content_id: String(ticket.content_id) },
-            new_status: 'removed',
+            new_status: action_type === 'temporary_takedown' ? 'temporarily_removed' : 'removed',
             reason,
             actor_admin_id: req.adminUser.id,
           });

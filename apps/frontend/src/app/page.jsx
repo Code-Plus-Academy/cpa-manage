@@ -540,14 +540,28 @@ export default function AdminDashboard() {
                 {selectedItem.content_id && (
                   <div>
                     <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Content Inspection URL</span>
-                    <a
-                      href={`https://codeplusacademy.in/content/${selectedItem.content_id}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: tokens.colors.primary, fontSize: '12px', wordBreak: 'break-all', fontWeight: '600', textDecoration: 'underline' }}
-                    >
-                      https://codeplusacademy.in/content/{selectedItem.content_id} ↗
-                    </a>
+                    {(() => {
+                      const type = (selectedItem.content_type || 'posts').toLowerCase().trim();
+                      let pathCategory = 'posts';
+                      if (type.includes('course')) pathCategory = 'courses';
+                      else if (type.includes('video')) pathCategory = 'videos';
+                      else if (type.includes('article')) pathCategory = 'articles';
+                      else if (type.includes('short')) pathCategory = 'shorts';
+                      else if (type.includes('note')) pathCategory = 'notes';
+                      else if (type.includes('post')) pathCategory = 'posts';
+                      else pathCategory = type.endsWith('s') ? type : `${type}s`;
+                      const fullUrl = `https://www.codeplusacademy.in/${pathCategory}/${selectedItem.content_id}`;
+                      return (
+                        <a
+                          href={fullUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{ color: tokens.colors.primary, fontSize: '12px', wordBreak: 'break-all', fontWeight: '600', textDecoration: 'underline' }}
+                        >
+                          {fullUrl} ↗
+                        </a>
+                      );
+                    })()}
                   </div>
                 )}
                 <div>
