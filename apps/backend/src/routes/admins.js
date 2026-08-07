@@ -137,12 +137,22 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
 
     await client.query('COMMIT');
 
-    // Asynchronously dispatch physical email via Resend API / SMTP
-    sendMail({
-      to: email.toLowerCase().trim(),
-      subject,
-      html: bodyHtml,
-    }).catch(err => console.error('[admins.js] Failed to send email out:', err));
+    // Asynchronously compile customizable template from DB & dispatch physical email via Resend API
+    const { sendTemplatedEmail } = require('../services/emailTemplateCompiler');
+    sendTemplatedEmail({
+      templateKey: 'admin_registration_otp',
+      recipientEmail: email.toLowerCase().trim(),
+      payload: {
+        display_name,
+        name: display_name,
+        otp_code: otpCode,
+        expiry_minutes: '15',
+        expires_minutes: '15',
+      },
+      userId: newAdmin.id,
+    }).then(ok => {
+      console.log(`[admins.js] sendTemplatedEmail result for ${email}: ${ok ? 'SUCCESS' : 'FAILED'}`);
+    }).catch(err => console.error('[admins.js] Exception in sendTemplatedEmail:', err));
 
     res.status(201).json({
       admin_user: { ...newAdmin, permissions: validPerms },
