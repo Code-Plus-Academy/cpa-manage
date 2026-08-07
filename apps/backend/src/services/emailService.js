@@ -5,9 +5,9 @@
 const { Resend } = require('resend');
 
 async function sendMail({ to, subject, html }) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.warn('[EmailService] RESEND_API_KEY missing in environment variables on Render. Email not dispatched to network.');
+    console.warn('[EmailService] EMAIL_PROVIDER_API_KEY / RESEND_API_KEY missing in environment variables on Render. Email not dispatched to network.');
     return false;
   }
 
