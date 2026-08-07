@@ -9,6 +9,7 @@ const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 const contentActionsClient = require('../grpc/client');
+const config = require('../config');
 
 function resolveTicketTarget(ticket) {
   let type = ticket?.content_type || '';
