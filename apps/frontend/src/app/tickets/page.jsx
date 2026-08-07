@@ -37,6 +37,31 @@ export default function StandaloneTicketsPage() {
   const [actionReason, setActionReason] = useState('');
   const [issueStrike, setIssueStrike] = useState(false);
   const [submittingAction, setSubmittingAction] = useState(false);
+  const [refiningAi, setRefiningAi] = useState(false);
+
+  const handleRefineJustificationWithAI = async () => {
+    if (!actionReason || !actionReason.trim()) {
+      alert('Please enter initial raw notes before refining with AI.');
+      return;
+    }
+    setRefiningAi(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/cases/refine-justification`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ raw_notes: actionReason, case_type: selectedTicket?.type || 'moderation' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setActionReason(data.refined_justification);
+      }
+    } catch (err) {
+      console.error('Failed to refine justification:', err);
+    } finally {
+      setRefiningAi(false);
+    }
+  };
 
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
@@ -527,6 +552,27 @@ export default function StandaloneTicketsPage() {
                     <h3 style={{ fontSize: '14px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '12px' }}>Ticket Metadata</h3>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: tokens.colors.textSecondary }}>
                       <div><strong style={{ color: tokens.colors.textMuted }}>Category:</strong> {selectedTicket.category || selectedTicket.type}</div>
+                      {selectedTicket.content_id && (
+                        <div>
+                          <strong style={{ color: tokens.colors.textMuted, display: 'block' }}>Content Inspection URL:</strong>
+                          <a
+                            href={`https://codeplusacademy.in/content/${selectedTicket.content_id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: tokens.colors.primary, fontSize: '12px', wordBreak: 'break-all', fontWeight: '600', textDecoration: 'underline' }}
+                          >
+                            https://codeplusacademy.in/content/{selectedTicket.content_id} ↗
+                          </a>
+                        </div>
+                      )}
+                      <div>
+                        <strong style={{ color: tokens.colors.textMuted, display: 'block' }}>Publisher & Creator Details:</strong>
+                        <div style={{ fontSize: '11px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px', marginTop: '2px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+                          <div><strong>Publisher:</strong> {selectedTicket.publisher_name || selectedTicket.reporter_email || 'Creator Account'}</div>
+                          <div><strong>Email:</strong> {selectedTicket.publisher_email || selectedTicket.reporter_email || 'N/A'}</div>
+                          <div><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                        </div>
+                      </div>
                       <div><strong style={{ color: tokens.colors.textMuted }}>Submitted:</strong> {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleString() : 'N/A'}</div>
                       <div><strong style={{ color: tokens.colors.textMuted }}>Assigned Admin:</strong> {selectedTicket.assigned_admin_id || 'Unassigned'}</div>
                     </div>
@@ -558,6 +604,7 @@ export default function StandaloneTicketsPage() {
                           }}
                         >
                           <option value="acknowledge">Acknowledge Ticket</option>
+                          <option value="temporary_takedown">Temporary Takedown (Send 7-Day Reply Notice)</option>
                           <option value="dismiss">Dismiss Claim</option>
                           <option value="remove_content">Remove Content (gRPC setContentStatus)</option>
                           <option value="approve_claim">Approve Copyright / Claim</option>
@@ -567,7 +614,17 @@ export default function StandaloneTicketsPage() {
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '6px' }}>Public Justification / Reason</label>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <label style={{ fontSize: '12px', color: tokens.colors.textMuted }}>Public Justification / Reason</label>
+                          <button
+                            type="button"
+                            onClick={handleRefineJustificationWithAI}
+                            disabled={refiningAi}
+                            style={{ padding: '2px 6px', borderRadius: '4px', background: 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)', color: '#fff', fontSize: '11px', fontWeight: '600', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            {refiningAi ? 'Refining...' : '✨ Refine with AI'}
+                          </button>
+                        </div>
                         <textarea
                           required
                           rows={4}
