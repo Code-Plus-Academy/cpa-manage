@@ -43,7 +43,7 @@ router.get('/', requirePermission.rootOnly, async (req, res, next) => {
 router.post('/', requirePermission.rootOnly, async (req, res, next) => {
   const client = await getClient();
   try {
-    const { email, display_name, password } = req.body;
+    const { email, display_name, password, permissions = [] } = req.body;
 
     if (!email || !display_name || !password) {
       return next(new AppError('VALIDATION_ERROR', 400, { fields: { email: !email ? 'required' : undefined, display_name: !display_name ? 'required' : undefined, password: !password ? 'required' : undefined } }));
@@ -67,6 +67,18 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
 
     const newAdmin = rows[0];
 
+    // Filter out root-only permission if present
+    const validPerms = (Array.isArray(permissions) ? permissions : []).filter(p => p !== 'admin.manage');
+
+    for (const key of validPerms) {
+      await client.query(
+        `INSERT INTO admin_user_permissions (admin_user_id, permission_key, granted_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (admin_user_id, permission_key) DO NOTHING`,
+        [newAdmin.id, key, req.adminUser.id]
+      );
+    }
+
     // Same-transaction audit log (Ground Rule 6)
     await writeAuditLog(client, {
       actorAdminId: req.adminUser.id,
@@ -76,12 +88,12 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
       action: 'admin.create',
       targetType: 'admin_user',
       targetId: String(newAdmin.id),
-      reason: `Created worker admin account for ${email}`,
+      reason: `Created worker admin account for ${email} with permissions [${validPerms.join(', ')}]`,
     });
 
     await client.query('COMMIT');
 
-    res.status(201).json({ admin_user: { ...newAdmin, permissions: [] } });
+    res.status(201).json({ admin_user: { ...newAdmin, permissions: validPerms } });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
