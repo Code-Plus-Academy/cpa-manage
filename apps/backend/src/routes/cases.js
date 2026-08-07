@@ -307,7 +307,7 @@ router.patch(
             if (mainBackendUrl) {
               const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
               const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
-              await fetchFn(`${mainBackendUrl.replace(/\/$/, '')}/api/internal/set-content-status`, {
+              const resp = await fetchFn(`${mainBackendUrl.replace(/\/$/, '')}/api/internal/set-content-status`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -321,7 +321,12 @@ router.patch(
                   actor_admin_id: req.adminUser.id,
                 }),
               });
-              console.info('[HTTP SetContentStatus] Successfully updated content status on main backend via HTTP');
+              if (!resp.ok) {
+                const errText = await resp.text();
+                console.error('[HTTP SetContentStatus] Failed with HTTP status:', resp.status, errText);
+              } else {
+                console.info('[HTTP SetContentStatus] Successfully updated content status on main backend via HTTP');
+              }
             }
           } catch (httpErr) {
             console.error('[HTTP SetContentStatus Failed]:', httpErr.message);
