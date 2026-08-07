@@ -648,6 +648,23 @@ router.put('/tasks/:taskId', async (req, res, next) => {
 
 // ─── 6. DOCUMENT TEMPLATES & VERSIONING ───────────────────────────────────────
 
+const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL || 'http://127.0.0.1:5000';
+
+async function syncTemplateToPDFService(title, htmlContent) {
+  if (!htmlContent) return;
+  try {
+    const safeName = (title || 'template').replace(/[^a-zA-Z0-9_-]/g, '_');
+    await fetch(`${PDF_SERVICE_URL}/api/templates`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: safeName, html: htmlContent })
+    });
+    console.log(`[TemplateSync] Successfully synced template '${safeName}' to PDF Service at ${PDF_SERVICE_URL}`);
+  } catch (err) {
+    console.warn(`[TemplateSync] Could not sync template to PDF Service: ${err.message}`);
+  }
+}
+
 // GET /templates — List document templates
 router.get('/templates', async (req, res, next) => {
   try {
@@ -693,6 +710,8 @@ router.post('/templates', async (req, res, next) => {
        VALUES ($1, 1, $2, $3::jsonb, $4)`,
       [template.id, template.html_content, JSON.stringify(varsArray), req.admin?.id || null]
     );
+
+    syncTemplateToPDFService(template.title, template.html_content);
 
     res.json({ template });
   } catch (error) {
@@ -753,6 +772,8 @@ router.put('/templates/:id', async (req, res, next) => {
        VALUES ($1, $2, $3, $4::jsonb, $5)`,
       [template.id, newVersion, template.html_content, JSON.stringify(varsArray), req.admin?.id || null]
     );
+
+    syncTemplateToPDFService(template.title, template.html_content);
 
     res.json({ template });
   } catch (error) {
