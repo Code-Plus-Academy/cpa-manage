@@ -284,7 +284,7 @@ router.patch(
       // gRPC content status update with HTTP fallback if content removal approved
       const target = resolveTicketTarget(ticket);
       if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && target.content_id && target.content_type) {
-        const newStatusPayload = action_type === 'temporary_takedown' ? 'temporarily_removed' : 'removed';
+        const newStatusPayload = 'removed';
         let setStatusOk = false;
 
         try {
