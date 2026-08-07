@@ -303,7 +303,7 @@ router.patch(
 
         if (!setStatusOk) {
           try {
-            const mainBackendUrl = process.env.MAIN_BACKEND_URL;
+            const mainBackendUrl = process.env.MAIN_BACKEND_URL || config.MAIN_BACKEND_URL || 'https://api.codeplusacademy.in';
             if (mainBackendUrl) {
               const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
               const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;

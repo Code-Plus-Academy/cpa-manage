@@ -17,7 +17,7 @@ const OPTIONAL_VARS = {
   ADMIN_SESSION_COOKIE_NAME: 'cpa_admin_token',
   ADMIN_COOKIE_DOMAIN: '',
   TOTP_ISSUER_NAME: 'CodePlusAcademy',
-  MAIN_BACKEND_URL: '',
+  MAIN_BACKEND_URL: 'https://api.codeplusacademy.in',
   EMAIL_PROVIDER_API_KEY: '',
   EMAIL_FROM_ADDRESS: 'notifications@codeplusacademy.in',
   MANAGE_SERVICE_KEY: '',
