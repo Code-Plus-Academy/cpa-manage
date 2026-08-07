@@ -10,6 +10,29 @@ const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 const contentActionsClient = require('../grpc/client');
 
+function resolveTicketTarget(ticket) {
+  let type = ticket?.content_type || '';
+  let id = ticket?.content_id ? String(ticket.content_id) : '';
+
+  if (type && id) return { content_type: type, content_id: id };
+
+  const textToScan = [ticket?.description, ticket?.category, ...(Array.isArray(ticket?.evidence_urls) ? ticket.evidence_urls : [])].filter(Boolean).join(' ');
+
+  const postMatch = textToScan.match(/\/posts\/([a-zA-Z0-9_-]+)/);
+  if (postMatch) return { content_type: 'post', content_id: postMatch[1] };
+
+  const noteMatch = textToScan.match(/\/notes\/(?:resource\/)?([a-zA-Z0-9_-]+)/);
+  if (noteMatch) return { content_type: 'note', content_id: noteMatch[1] };
+
+  const videoMatch = textToScan.match(/\/videos\/([a-zA-Z0-9_-]+)/);
+  if (videoMatch) return { content_type: 'video', content_id: videoMatch[1] };
+
+  const articleMatch = textToScan.match(/\/articles\/([a-zA-Z0-9_-]+)/);
+  if (articleMatch) return { content_type: 'article', content_id: articleMatch[1] };
+
+  return { content_type: type, content_id: id };
+}
+
 // Helper to determine allowed ticket types based on admin permissions
 function getAllowedTicketTypes(adminUser) {
   if (adminUser.is_root) return null; // Null means all types allowed
@@ -156,11 +179,12 @@ router.get(
       );
 
       let contentSummary = null;
-      if (ticket.content_id && ticket.content_type) {
+      const target = resolveTicketTarget(ticket);
+      if (target.content_id && target.content_type) {
         try {
           contentSummary = await contentActionsClient.getContentSummary({
-            content_type: ticket.content_type,
-            content_id: String(ticket.content_id),
+            content_type: target.content_type,
+            content_id: String(target.content_id),
           });
         } catch (grpcErr) {
           console.warn('[gRPC GetContentSummary Error]:', grpcErr.message);
@@ -258,13 +282,14 @@ router.patch(
       await client.query('COMMIT');
 
       // gRPC content status update with HTTP fallback if content removal approved
-      if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && ticket.content_id && ticket.content_type) {
+      const target = resolveTicketTarget(ticket);
+      if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && target.content_id && target.content_type) {
         const newStatusPayload = action_type === 'temporary_takedown' ? 'temporarily_removed' : 'removed';
         let setStatusOk = false;
 
         try {
           const res = await contentActionsClient.setContentStatus({
-            ref: { content_type: ticket.content_type, content_id: String(ticket.content_id) },
+            ref: { content_type: target.content_type, content_id: String(target.content_id) },
             new_status: newStatusPayload,
             reason,
             actor_admin_id: req.adminUser.id,
@@ -281,16 +306,16 @@ router.patch(
             const mainBackendUrl = process.env.MAIN_BACKEND_URL;
             if (mainBackendUrl) {
               const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
-              const fetch = require('node-fetch');
-              await fetch(`${mainBackendUrl}/api/internal/set-content-status`, {
+              const fetchFn = typeof fetch !== 'undefined' ? fetch : globalThis.fetch;
+              await fetchFn(`${mainBackendUrl.replace(/\/$/, '')}/api/internal/set-content-status`, {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
                   'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
                 },
                 body: JSON.stringify({
-                  content_type: ticket.content_type,
-                  content_id: String(ticket.content_id),
+                  content_type: target.content_type,
+                  content_id: String(target.content_id),
                   new_status: newStatusPayload,
                   reason,
                   actor_admin_id: req.adminUser.id,

@@ -48,7 +48,7 @@ router.post('/ingest-ticket', requireServiceKey, async (req, res) => {
     const now = new Date();
     const slaResolveBy = new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000);
     const safeUserId = parseUuid(user_id);
-    const safeContentId = parseUuid(content_id);
+    const safeContentId = content_id ? String(content_id).trim() : null;
 
     const { rows } = await query(
       `INSERT INTO support_tickets (
