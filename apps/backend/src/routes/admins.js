@@ -226,6 +226,11 @@ router.patch('/:id/permissions', requirePermission.rootOnly, async (req, res, ne
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
+  } finally {
+    client.release();
+  }
+});
+
 // ─── PUT /admin/admins/:id/permissions (Overwrite permissions) ──────────────────
 router.put('/:id/permissions', requirePermission.rootOnly, async (req, res, next) => {
   const client = await getClient();
