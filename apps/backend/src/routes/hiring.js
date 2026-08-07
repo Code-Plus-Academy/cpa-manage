@@ -832,6 +832,27 @@ router.post('/templates/:id/preview', async (req, res, next) => {
   }
 });
 
+// DELETE /templates/:id — Delete template and sync deletion to PDF Service
+router.delete('/templates/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const tplRes = await query(`SELECT * FROM hiring_document_templates WHERE id = $1`, [id]);
+    if (tplRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Template not found' } });
+    }
+
+    const tpl = tplRes.rows[0];
+    await query(`DELETE FROM hiring_document_templates WHERE id = $1`, [id]);
+
+    const safeName = (tpl.title || 'template').replace(/[^a-zA-Z0-9_-]/g, '_');
+    fetch(`${PDF_SERVICE_URL}/api/templates/${safeName}.html`, { method: 'DELETE' }).catch(() => {});
+
+    res.json({ message: `Template '${tpl.title}' deleted successfully` });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /documents — Generated documents log
 router.get('/documents', async (req, res, next) => {
   try {
