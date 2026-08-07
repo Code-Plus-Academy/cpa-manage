@@ -280,7 +280,9 @@ router.patch(
   }
 );
 
-// POST /admin/cases/refine-justification — Refine raw admin notes into formal compliance statement
+const aiService = require('../services/aiService');
+
+// POST /admin/cases/refine-justification — Refine raw admin notes into formal compliance statement via AI
 router.post('/refine-justification', async (req, res, next) => {
   try {
     const { raw_notes, case_type } = req.body;
@@ -288,10 +290,10 @@ router.post('/refine-justification', async (req, res, next) => {
       return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Raw justification text is required' } });
     }
 
-    const typePrefix = case_type ? `[${case_type.toUpperCase()}] ` : '';
-    const cleanNotes = raw_notes.trim();
-
-    const refined = `${typePrefix}Upon administrative moderation review, the reported material has been evaluated under Code+ Academy Trust & Safety terms. Justification: ${cleanNotes}. Corrective action applied pursuant to platform compliance guidelines.`;
+    const refined = await aiService.refineJustification({
+      raw_notes,
+      case_type: case_type || 'moderation',
+    });
 
     res.json({ refined_justification: refined, original: raw_notes });
   } catch (err) {
