@@ -233,4 +233,5 @@ module.exports = {
   sanitizeSubjectText,
   validatePayloadSchema,
   DEFAULT_TEMPLATES,
+  CRITICAL_TEMPLATE_KEYS,
 };

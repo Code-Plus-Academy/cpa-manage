@@ -7,7 +7,7 @@ if (!process.env.DATABASE_URL) process.env.DATABASE_URL = 'postgresql://postgres
 if (!process.env.ADMIN_SESSION_SECRET) process.env.ADMIN_SESSION_SECRET = 'test_secret';
 
 const { query } = require('../config/db');
-const { DEFAULT_TEMPLATES } = require('../services/emailTemplateCompiler');
+const { DEFAULT_TEMPLATES, CRITICAL_TEMPLATE_KEYS } = require('../services/emailTemplateCompiler');
 
 async function seedDefaultTemplates() {
   console.log('--- Seeding DEFAULT_TEMPLATES into email_templates DB table ---');
@@ -28,7 +28,10 @@ async function seedDefaultTemplates() {
        VALUES 
          ($1, $2, $3, $4, $5, $6, 1, true, $7, NOW())
        ON CONFLICT (key) DO UPDATE
-       SET available_placeholders = EXCLUDED.available_placeholders,
+       SET subject_template = EXCLUDED.subject_template,
+           body_html_template = EXCLUDED.body_html_template,
+           available_placeholders = EXCLUDED.available_placeholders,
+           is_system_locked = EXCLUDED.is_system_locked,
            updated_at = NOW()
        RETURNING key`,
       [
@@ -38,7 +41,7 @@ async function seedDefaultTemplates() {
         tpl.subject,
         tpl.html,
         JSON.stringify(tpl.available_placeholders || []),
-        ['admin_registration_otp', 'password_reset', '2fa_login_alert'].includes(key)
+        CRITICAL_TEMPLATE_KEYS.has(key)
       ]
     );
 

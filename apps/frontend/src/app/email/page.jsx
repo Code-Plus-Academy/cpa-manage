@@ -80,8 +80,13 @@ export default function StandaloneEmailPage() {
       const vars = Array.from(found);
       setDetectedFields(vars);
 
-      const allowedList = editingTemplate?.available_placeholders || ['display_name', 'name', 'otp_code', 'expiry_minutes', 'position', 'startdate', 'action_link', 'ticket_id', 'action_type', 'reason'];
-      const allowedSet = new Set(allowedList);
+      // In Create-New flow (editingTemplate is null), disable unsupported variable warnings
+      if (!editingTemplate || !Array.isArray(editingTemplate.available_placeholders)) {
+        setInvalidFields([]);
+        return;
+      }
+
+      const allowedSet = new Set(editingTemplate.available_placeholders);
       const invalid = vars.filter(v => !allowedSet.has(v));
       setInvalidFields(invalid);
     }, 300);
