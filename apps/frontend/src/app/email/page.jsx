@@ -12,7 +12,8 @@ import { tokens } from '../theme/tokens';
 export default function StandaloneEmailPage() {
   const router = useRouter();
   const [adminUser, setAdminUser] = useState(null);
-  const [activeSubTab, setActiveSubTab] = useState('templates'); // 'templates' | 'schedules' | 'campaigns' | 'analytics'
+  const searchTab = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null;
+  const [activeSubTab, setActiveSubTab] = useState(searchTab || 'templates'); // 'templates' | 'schedules' | 'campaigns' | 'analytics'
   const [loading, setLoading] = useState(true);
   const [dataLoading, setDataLoading] = useState(false);
 
