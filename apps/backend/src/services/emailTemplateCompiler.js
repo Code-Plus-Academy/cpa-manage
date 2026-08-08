@@ -69,12 +69,21 @@ const DEFAULT_TEMPLATES = {
 
 /**
  * Sanitize email subject line (Strips ALL HTML tags for plain text subject lines)
+ * Uses noEscape: true on Handlebars compile so scalar values like "Tom & Jerry"
+ * remain unescaped plain text instead of entity-encoded "&amp;".
  */
-function sanitizeSubjectText(subject) {
-  return sanitizeHtml(subject || '', {
+function sanitizeSubjectText(subjectTpl, payload = {}) {
+  const unescapedSubject = Handlebars.compile(subjectTpl || '', { noEscape: true })(payload);
+  const strippedSubject = sanitizeHtml(unescapedSubject, {
     allowedTags: [],
     allowedAttributes: {},
   });
+  return strippedSubject
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 /**
@@ -115,8 +124,7 @@ function compileAndValidateTemplate({ subject_template, body_html_template, avai
 
   try {
     // 1. Precompile and test Subject
-    const subjectCompiled = Handlebars.compile(subject_template || '')(mockPayload);
-    const sanitizedSubject = sanitizeSubjectText(subjectCompiled);
+    const sanitizedSubject = sanitizeSubjectText(subject_template || '', mockPayload);
 
     // 2. Precompile and test Body HTML
     const bodyCompiled = Handlebars.compile(body_html_template || '')(mockPayload);
@@ -192,11 +200,10 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     }
 
     // Handlebars Compilation with auto-escaping for XSS protection
-    const rawCompiledSubject = Handlebars.compile(subjectTpl)(payload);
+    const compiledSubject = sanitizeSubjectText(subjectTpl, payload);
     const rawCompiledBody = Handlebars.compile(bodyTpl)(payload);
 
     // Defense-in-depth HTML sanitization
-    const compiledSubject = sanitizeSubjectText(rawCompiledSubject);
     const compiledBody = sanitizeCompiledHtml(rawCompiledBody);
 
     // Physical dispatch via Resend SDK
