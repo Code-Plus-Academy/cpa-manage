@@ -6,6 +6,7 @@
 
 const Handlebars = require('handlebars');
 const sanitizeHtml = require('sanitize-html');
+const { decode } = require('html-entities');
 const { query } = require('../config/db');
 const { sendMail } = require('./emailService');
 
@@ -74,16 +75,14 @@ const DEFAULT_TEMPLATES = {
  */
 function sanitizeSubjectText(subjectTpl, payload = {}) {
   const unescapedSubject = Handlebars.compile(subjectTpl || '', { noEscape: true })(payload);
-  const strippedSubject = sanitizeHtml(unescapedSubject, {
+  const strippedTags = sanitizeHtml(unescapedSubject, {
     allowedTags: [],
     allowedAttributes: {},
   });
-  return strippedSubject
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+  // Prevent CRLF SMTP Header Injection (replace \r and \n with space)
+  const noCRLF = strippedTags.replace(/[\r\n]+/g, ' ');
+  // Comprehensive entity decoding for non-ASCII, quotes, em-dashes
+  return decode(noCRLF);
 }
 
 /**
