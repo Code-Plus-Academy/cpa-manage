@@ -9,15 +9,10 @@ async function runCampaignSender() {
     );
 
     for (const campaign of rows) {
-      await query(
-        `UPDATE email_campaigns SET status = 'sending' WHERE id = $1`,
-        [campaign.id]
+      console.warn(
+        `[Campaign Sender Job] Skipping campaign ${campaign.id}: Bulk dispatch engine for segment filters (${campaign.segment_filter}) is not yet implemented. Campaign status remains 'scheduled'.`
       );
-      console.log(`[Campaign Sender Job] Dispatched scheduled email campaign ${campaign.id}`);
-      await query(
-        `UPDATE email_campaigns SET status = 'sent' WHERE id = $1`,
-        [campaign.id]
-      );
+      // STUB SAFETY: Do NOT update campaign status to 'sent' without dispatching emails.
     }
   } catch (err) {
     console.error('[Campaign Sender Job Error]:', err);

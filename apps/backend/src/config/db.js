@@ -139,7 +139,22 @@ const query = async (text, params) => {
       if (lower.includes('from email_templates')) {
         return { rows: mockTemplates };
       }
+      if (lower.includes('insert into email_campaigns')) {
+        const newCmp = {
+          id: params ? params[0] : 'cmp-1',
+          name: params ? params[1] : 'Sample Campaign',
+          template_key: params ? params[2] : 'admin_registration_otp',
+          segment_filter: params ? params[3] : 'all_users',
+          status: params ? params[4] : 'scheduled',
+          created_at: new Date().toISOString(),
+        };
+        mockCampaigns.unshift(newCmp);
+        return { rows: [newCmp] };
+      }
       if (lower.includes('from email_campaigns')) {
+        if (params && params[0]) {
+          return { rows: mockCampaigns.filter(c => c.id === params[0]) };
+        }
         return { rows: mockCampaigns };
       }
       if (lower.includes('from email_schedules')) {

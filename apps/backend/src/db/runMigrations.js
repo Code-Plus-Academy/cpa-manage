@@ -24,6 +24,15 @@ async function run() {
       )
     `);
 
+    // Sync _migrations SERIAL sequence to current MAX(id) to prevent duplicate key errors
+    await client.query(`
+      SELECT setval(
+        pg_get_serial_sequence('_migrations', 'id'),
+        COALESCE((SELECT MAX(id) FROM _migrations), 0) + 1,
+        false
+      )
+    `).catch(() => {});
+
     const migrationsDir = path.join(__dirname, 'migrations');
     const files = fs.readdirSync(migrationsDir)
       .filter(f => f.endsWith('.sql'))
@@ -44,13 +53,14 @@ async function run() {
       await client.query('BEGIN');
       try {
         await client.query(sql);
-        await client.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
+        await client.query('INSERT INTO _migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING', [file]);
         await client.query('COMMIT');
         console.log(`  [OK]   ${file}`);
       } catch (err) {
         await client.query('ROLLBACK');
         console.error(`  [FAIL] ${file}:`, err.message);
-        process.exit(1);
+        if (require.main === module) process.exit(1);
+        throw err;
       }
     }
 
