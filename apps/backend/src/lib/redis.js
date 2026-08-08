@@ -1,51 +1,48 @@
 /**
  * cpa-manage/apps/backend/src/lib/redis.js
- * Redis Cache Invalidation Helper
+ * Redis Cache Helper — uses Upstash REST API via plain fetch() (zero dependencies)
  */
-let _upstashRedis = null;
 
-function getUpstashRedis() {
-  if (_upstashRedis) return _upstashRedis;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return null;
-  try {
-    const { Redis } = require('@upstash/redis');
-    _upstashRedis = new Redis({ url, token });
-  } catch (err) {
-    // If @upstash/redis is not installed, fallback gracefully
-  }
-  return _upstashRedis;
-}
+const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-let _ioRedis = null;
-function getIoRedis() {
-  if (_ioRedis) return _ioRedis;
-  const redisUrl = process.env.REDIS_URL;
-  if (!redisUrl) return null;
-  try {
-    const RedisIO = require('ioredis');
-    _ioRedis = new RedisIO(redisUrl);
-  } catch (err) {
-    // fallback
+async function upstashCommand(...args) {
+  if (!UPSTASH_URL || !UPSTASH_TOKEN) {
+    console.warn('[Redis] UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN not set — skipping Redis operation');
+    return null;
   }
-  return _ioRedis;
+  try {
+    const resp = await fetch(UPSTASH_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${UPSTASH_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(args),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      console.error(`[Redis] Upstash REST error (${resp.status}):`, errText);
+      return null;
+    }
+    const data = await resp.json();
+    if (data.error) {
+      console.error('[Redis] Upstash command error:', data.error);
+      return null;
+    }
+    return data.result;
+  } catch (e) {
+    console.error('[Redis] Upstash fetch error:', e.message);
+    return null;
+  }
 }
 
 async function cacheDel(...keys) {
   if (!keys || !keys.length) return;
   try {
-    const upstash = getUpstashRedis();
-    if (upstash) {
-      await upstash.del(...keys);
-      console.log(`[Redis] Invalidated cache keys in Upstash: ${keys.join(', ')}`);
-      return;
-    }
-    const io = getIoRedis();
-    if (io) {
-      await io.del(...keys);
-      console.log(`[Redis] Invalidated cache keys in ioredis: ${keys.join(', ')}`);
-      return;
+    const result = await upstashCommand('DEL', ...keys);
+    if (result !== null) {
+      console.log(`[Redis] Invalidated cache keys: ${keys.join(', ')}`);
     }
   } catch (e) {
     console.error('[Redis cacheDel Error]:', e.message);
@@ -54,21 +51,23 @@ async function cacheDel(...keys) {
 
 async function cacheSet(key, value, ttl = 86400) {
   try {
-    const upstash = getUpstashRedis();
-    if (upstash) {
-      await upstash.set(key, value, { ex: ttl });
-      console.log(`[Redis] Set cache key in Upstash: ${key}`);
-      return;
-    }
-    const io = getIoRedis();
-    if (io) {
-      await io.set(key, value, 'EX', ttl);
-      console.log(`[Redis] Set cache key in ioredis: ${key}`);
-      return;
+    const result = await upstashCommand('SET', key, value, 'EX', ttl);
+    if (result !== null) {
+      console.log(`[Redis] Set cache key: ${key} (TTL: ${ttl}s)`);
     }
   } catch (e) {
     console.error('[Redis cacheSet Error]:', e.message);
   }
 }
 
-module.exports = { cacheDel, cacheSet };
+async function cacheGet(key) {
+  try {
+    return await upstashCommand('GET', key);
+  } catch (e) {
+    console.error('[Redis cacheGet Error]:', e.message);
+    return null;
+  }
+}
+
+module.exports = { cacheDel, cacheSet, cacheGet };
+
