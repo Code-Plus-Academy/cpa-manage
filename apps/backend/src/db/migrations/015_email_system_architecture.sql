@@ -3,7 +3,8 @@ ALTER TABLE email_templates
   ADD COLUMN IF NOT EXISTS draft_subject_template TEXT,
   ADD COLUMN IF NOT EXISTS draft_body_html_template TEXT,
   ADD COLUMN IF NOT EXISTS available_placeholders JSONB DEFAULT '[]',
-  ADD COLUMN IF NOT EXISTS is_system_locked BOOLEAN DEFAULT false;
+  ADD COLUMN IF NOT EXISTS is_system_locked BOOLEAN DEFAULT false,
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 -- Drop old check constraint to support all expanded categories
 ALTER TABLE email_templates
