@@ -243,14 +243,19 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     const { rows } = await query(
       `SELECT subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked 
        FROM email_templates 
-       WHERE key = $1 AND is_active = true`,
+       WHERE LOWER(TRIM(key)) = LOWER(TRIM($1)) AND is_active = true`,
       [templateKey]
     );
 
     if (rows.length > 0) {
       const r = rows[0];
-      const effSubject = (useDraft && r.draft_subject_template) ? r.draft_subject_template : (r.subject_template || r.draft_subject_template);
-      const effBody = (useDraft && r.draft_body_html_template) ? r.draft_body_html_template : (r.body_html_template || r.draft_body_html_template);
+      const dSub = r.draft_subject_template && r.draft_subject_template.trim() ? r.draft_subject_template : null;
+      const dBody = r.draft_body_html_template && r.draft_body_html_template.trim() ? r.draft_body_html_template : null;
+      const lSub = r.subject_template && r.subject_template.trim() ? r.subject_template : null;
+      const lBody = r.body_html_template && r.body_html_template.trim() ? r.body_html_template : null;
+
+      const effSubject = (useDraft && dSub) ? dSub : (dSub || lSub);
+      const effBody = (useDraft && dBody) ? dBody : (dBody || lBody);
 
       if (effSubject) subjectTpl = effSubject;
       if (effBody) bodyTpl = effBody;
