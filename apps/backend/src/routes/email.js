@@ -342,20 +342,44 @@ router.delete('/templates/:key', requirePermission('email.templates.edit'), asyn
 // POST /admin/email/templates/render-preview — Test Handlebars render with mock payload
 router.post('/templates/render-preview', requirePermission.any(['email.templates.edit', 'email.analytics.view']), async (req, res, next) => {
   try {
-    const { subject_template, body_html_template, payload = {} } = req.body;
+    const { subject_template = '', body_html_template = '', payload = {} } = req.body || {};
     const Handlebars = require('handlebars');
     const { sanitizeCompiledHtml } = require('../services/emailTemplateCompiler');
 
-    const renderedSubject = Handlebars.compile(subject_template || '')(payload);
-    const rawBody = Handlebars.compile(body_html_template || '')(payload);
-    const renderedBody = sanitizeCompiledHtml(rawBody);
+    let parsedPayload = payload;
+    if (typeof payload === 'string') {
+      try { parsedPayload = JSON.parse(payload); } catch (e) { parsedPayload = {}; }
+    }
+    if (!parsedPayload || typeof parsedPayload !== 'object') {
+      parsedPayload = {};
+    }
 
-    res.json({
+    let renderedSubject = subject_template;
+    try {
+      renderedSubject = Handlebars.compile(subject_template || '')(parsedPayload);
+    } catch (subErr) {
+      console.warn('[render-preview] Subject Handlebars compile warning:', subErr.message);
+    }
+
+    let renderedBody = body_html_template;
+    try {
+      const rawBody = Handlebars.compile(body_html_template || '')(parsedPayload);
+      renderedBody = sanitizeCompiledHtml(rawBody || '');
+    } catch (bodyErr) {
+      console.warn('[render-preview] Body Handlebars compile warning:', bodyErr.message);
+    }
+
+    return res.json({
       rendered_subject: renderedSubject,
       rendered_body_html: renderedBody,
     });
   } catch (err) {
-    res.status(400).json({ error: { message: err.message } });
+    console.error('[render-preview Exception]:', err);
+    return res.status(200).json({
+      rendered_subject: req.body?.subject_template || '',
+      rendered_body_html: req.body?.body_html_template || '',
+      error: err.message,
+    });
   }
 });
 
