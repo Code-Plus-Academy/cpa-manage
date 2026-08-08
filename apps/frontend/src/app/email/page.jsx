@@ -284,8 +284,12 @@ export default function StandaloneEmailPage() {
     }
   };
 
-  // Send Test Mail to Admin Inbox
+  // Send Test Mail to Custom or Admin Email Address
   const handleSendTestMail = async (key) => {
+    const defaultEmail = adminUser?.email || 'admin@codeplusacademy.in';
+    const targetEmail = prompt(`Enter recipient email address to send test email for '${key}':`, defaultEmail);
+    if (!targetEmail || !targetEmail.trim()) return;
+
     let parsedPayload = {};
     try {
       parsedPayload = JSON.parse(mockPayloadJson);
@@ -297,13 +301,13 @@ export default function StandaloneEmailPage() {
       const res = await apiFetch(`/admin/email/templates/${key}/test-send`, {
         method: 'POST',
         body: JSON.stringify({
-          recipient_email: adminUser?.email,
+          recipient_email: targetEmail.trim(),
           payload: parsedPayload,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        alert(data.message || `Test email sent to ${adminUser?.email}!`);
+        alert(data.message || `Test email sent successfully to ${targetEmail.trim()}!`);
       } else {
         alert(data.error?.message || data.message || 'Test send failed.');
       }

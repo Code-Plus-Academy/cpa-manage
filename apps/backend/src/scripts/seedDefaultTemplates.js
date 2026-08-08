@@ -12,14 +12,20 @@ const { DEFAULT_TEMPLATES, CRITICAL_TEMPLATE_KEYS } = require('../services/email
 async function seedDefaultTemplates() {
   console.log('--- Seeding DEFAULT_TEMPLATES into email_templates DB table ---');
 
-  // Ensure updated_at column exists on email_templates relation
+  // Ensure updated_at column exists on email_templates relation & email_sends columns exist
   await query(`
     ALTER TABLE email_templates
       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now(),
       ADD COLUMN IF NOT EXISTS draft_subject_template TEXT,
       ADD COLUMN IF NOT EXISTS draft_body_html_template TEXT,
       ADD COLUMN IF NOT EXISTS available_placeholders JSONB DEFAULT '[]',
-      ADD COLUMN IF NOT EXISTS is_system_locked BOOLEAN DEFAULT false
+      ADD COLUMN IF NOT EXISTS is_system_locked BOOLEAN DEFAULT false;
+
+    ALTER TABLE email_sends
+      ADD COLUMN IF NOT EXISTS recipient_email TEXT,
+      ADD COLUMN IF NOT EXISTS subject TEXT,
+      ADD COLUMN IF NOT EXISTS body_html TEXT,
+      ADD COLUMN IF NOT EXISTS merged_payload JSONB;
   `).catch(() => {});
 
   const entries = Object.entries(DEFAULT_TEMPLATES);
