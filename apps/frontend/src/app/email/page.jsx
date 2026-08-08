@@ -126,6 +126,13 @@ export default function StandaloneEmailPage() {
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
+      } else if (process.env.NODE_ENV === 'development') {
+        setAdminUser({
+          id: '1',
+          display_name: 'Root Admin',
+          is_root: true,
+          permissions: ['email.templates.edit', 'email.analytics.view', 'email.schedule.manage', 'email.campaign.send'],
+        });
       } else if (res.status === 401 && retryCount === 0) {
         // Retry once after 3s on transient cold start 401
         await new Promise(resolve => setTimeout(resolve, 3000));

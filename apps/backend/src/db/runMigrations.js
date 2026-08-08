@@ -61,7 +61,11 @@ async function run() {
   }
 }
 
-run().catch(err => {
-  console.error('Migration runner failed:', err);
-  process.exit(1);
-});
+module.exports = { runMigrations: run };
+
+if (require.main === module) {
+  run().catch(err => {
+    console.error('Migration runner failed:', err);
+    process.exit(1);
+  });
+}

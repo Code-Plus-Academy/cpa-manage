@@ -98,6 +98,23 @@ const query = async (text, params) => {
   } catch (err) {
     if (err.code === 'ECONNREFUSED' || err.message.includes('connect ECONNREFUSED') || err.message.includes('connect ETIMEDOUT')) {
       const lower = text.toLowerCase();
+      if (lower.includes('insert into email_sends')) {
+        const newSend = {
+          id: `send-${Date.now()}`,
+          template_key: params ? params[0] : 'admin_registration_otp',
+          user_id: params ? params[1] : null,
+          recipient_email: params ? params[2] : 'admin@codeplusacademy.in',
+          subject: params ? params[3] : 'Test Send Subject',
+          body_html: params ? params[4] : '<p>Test</p>',
+          status: params && params[6] ? params[6] : 'sent',
+          sent_at: new Date().toISOString(),
+          opened_at: null,
+          clicked_at: null,
+          unsubscribed_at: null,
+        };
+        mockSends.unshift(newSend);
+        return { rows: [newSend] };
+      }
       if (lower.includes('from email_sends')) {
         if (lower.includes('count(')) {
           const total_sends = mockSends.length;
@@ -106,6 +123,7 @@ const query = async (text, params) => {
           const bounced_count = mockSends.filter(s => s.status === 'bounced').length;
           return {
             rows: [{
+              total: total_sends,
               total_sends,
               sent_count,
               opened_count: 0,

@@ -92,6 +92,7 @@ function sanitizeSubjectText(subjectTpl, payload = {}) {
  */
 function sanitizeCompiledHtml(html) {
   return sanitizeHtml(html || '', {
+    allowVulnerableTags: true,
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
       'img', 'style', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'h1', 'h2', 'h3', 'h4', 'hr', 'br', 'a', 'p', 'b', 'i', 'strong', 'em', 'ul', 'ol', 'li'
     ]),
