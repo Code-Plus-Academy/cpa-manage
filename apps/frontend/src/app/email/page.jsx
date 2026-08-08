@@ -170,8 +170,6 @@ export default function StandaloneEmailPage() {
           apiFetch('/admin/email/analytics'),
           apiFetch('/admin/email/sends'),
         ]);
-          fetch(`${apiUrl}/admin/email/sends`, { credentials: 'include' })
-        ]);
         if (resAna.ok) {
           const dataAna = await resAna.json();
           setAnalytics(dataAna.analytics);
