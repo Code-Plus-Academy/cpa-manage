@@ -241,21 +241,23 @@ export default function AdminShell({
                 </div>
                 <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textPrimary, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                    {adminUser?.display_name || 'Admin'}
+                    {adminUser ? (adminUser.display_name || 'Admin') : 'Not Logged In'}
                   </div>
-                  <span
-                    style={{
-                      fontSize: '9px',
-                      fontWeight: '700',
-                      padding: '1px 5px',
-                      borderRadius: '4px',
-                      backgroundColor: isRoot ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                      color: isRoot ? '#F87171' : '#60A5FA',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    {isRoot ? 'ROOT' : 'WORKER'}
-                  </span>
+                  {adminUser && (
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: '700',
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        backgroundColor: isRoot ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                        color: isRoot ? '#F87171' : '#60A5FA',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {isRoot ? 'ROOT' : 'WORKER'}
+                    </span>
+                  )}
                 </div>
               </div>
               <button

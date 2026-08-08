@@ -100,15 +100,45 @@ export default function StandaloneEmailPage() {
     }
   }, [adminUser, activeSubTab]);
 
-  const checkAuthStatus = async () => {
+  const getAuthHeaders = () => {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['X-Admin-Token'] = token;
+    }
+    return headers;
+  };
+
+  const apiFetch = async (endpoint, options = {}) => {
+    const headers = { ...getAuthHeaders(), ...(options.headers || {}) };
+    return fetch(`${apiUrl}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'include',
+    });
+  };
+
+  const checkAuthStatus = async (retryCount = 0) => {
     try {
-      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
+      } else if (res.status === 401 && retryCount === 0) {
+        // Retry once after 3s on transient cold start 401
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return checkAuthStatus(1);
+      } else {
+        setAdminUser(null);
       }
     } catch (err) {
       console.error('Auth check failed:', err);
+      if (retryCount === 0) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        return checkAuthStatus(1);
+      }
+      setAdminUser(null);
     } finally {
       setLoading(false);
     }
@@ -118,26 +148,28 @@ export default function StandaloneEmailPage() {
     setDataLoading(true);
     try {
       if (subTab === 'templates') {
-        const res = await fetch(`${apiUrl}/admin/email/templates`, { credentials: 'include' });
+        const res = await apiFetch('/admin/email/templates');
         if (res.ok) {
           const data = await res.json();
           setTemplates(data.templates || []);
         }
       } else if (subTab === 'schedules') {
-        const res = await fetch(`${apiUrl}/admin/email/schedules`, { credentials: 'include' });
+        const res = await apiFetch('/admin/email/schedules');
         if (res.ok) {
           const data = await res.json();
           setSchedules(data.schedules || []);
         }
       } else if (subTab === 'campaigns') {
-        const res = await fetch(`${apiUrl}/admin/email/campaigns`, { credentials: 'include' });
+        const res = await apiFetch('/admin/email/campaigns');
         if (res.ok) {
           const data = await res.json();
           setCampaigns(data.campaigns || []);
         }
       } else if (subTab === 'analytics') {
         const [resAna, resSends] = await Promise.all([
-          fetch(`${apiUrl}/admin/email/analytics`, { credentials: 'include' }),
+          apiFetch('/admin/email/analytics'),
+          apiFetch('/admin/email/sends'),
+        ]);
           fetch(`${apiUrl}/admin/email/sends`, { credentials: 'include' })
         ]);
         if (resAna.ok) {
@@ -212,18 +244,16 @@ export default function StandaloneEmailPage() {
 
   // Publish Draft → Live Template
   const handlePublishTemplate = async (key) => {
-    if (!confirm(`Are you sure you want to publish draft as live version for template '${key}'?`)) return;
+    if (!confirm(`Are you sure you want to publish the draft version of template '${key}'? This will make it live immediately.`)) return;
     try {
-      const res = await fetch(`${apiUrl}/admin/email/templates/${key}/publish`, {
+      const res = await apiFetch(`/admin/email/templates/${key}/publish`, {
         method: 'POST',
-        credentials: 'include',
       });
-      const data = await res.json();
       if (res.ok) {
-        alert(data.message || `Template ${key} published!`);
         loadSubTabData('templates');
       } else {
-        alert(data.error?.message || data.message || 'Publish failed.');
+        const data = await res.json();
+        alert(data.error?.message || data.message || 'Failed to publish template');
       }
     } catch (err) {
       alert('Error publishing template');
@@ -232,11 +262,10 @@ export default function StandaloneEmailPage() {
 
   // Delete Template
   const handleDeleteTemplate = async (key) => {
-    if (!confirm(`Are you sure you want to delete template '${key}'?`)) return;
+    if (!confirm(`Are you sure you want to delete template '${key}'? This action cannot be undone.`)) return;
     try {
-      const res = await fetch(`${apiUrl}/admin/email/templates/${key}`, {
+      const res = await apiFetch(`/admin/email/templates/${key}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
       if (res.ok) {
         loadSubTabData('templates');
@@ -259,10 +288,8 @@ export default function StandaloneEmailPage() {
     }
 
     try {
-      const res = await fetch(`${apiUrl}/admin/email/templates/${key}/test-send`, {
+      const res = await apiFetch(`/admin/email/templates/${key}/test-send`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           recipient_email: adminUser?.email,
           payload: parsedPayload,
@@ -286,14 +313,12 @@ export default function StandaloneEmailPage() {
     try {
       parsedPayload = JSON.parse(mockPayloadJson);
     } catch (e) {
-      parsedPayload = { display_name: 'Rahul Sharma', name: 'Rahul Sharma', otp_code: '849201' };
+      parsedPayload = { display_name: adminUser?.display_name || 'Admin', name: adminUser?.display_name || 'Admin' };
     }
 
     try {
-      const res = await fetch(`${apiUrl}/admin/email/templates/render-preview`, {
+      const res = await apiFetch('/admin/email/templates/render-preview', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           subject_template: subTpl || subjectTemplate,
           body_html_template: bodyTpl || bodyHtmlTemplate,
@@ -354,6 +379,29 @@ export default function StandaloneEmailPage() {
     return (
       <AdminShell title="Email System Studio" user={adminUser}>
         <div style={{ padding: '60px 20px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading Email System Studio...</div>
+      </AdminShell>
+    );
+  }
+
+  if (!adminUser) {
+    return (
+      <AdminShell
+        title="Email System Studio"
+        subtitle="Authentication Required"
+        currentRoute="/email"
+        breadcrumb={['Communications', 'Email System']}
+        user={null}
+      >
+        <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+          <Lock size={48} color="#f59e0b" style={{ marginBottom: '16px' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '8px' }}>Authentication Required</h2>
+          <p style={{ fontSize: '14px', color: tokens.colors.textMuted, maxWidth: '480px', margin: '0 auto 20px auto' }}>
+            You are not currently logged in to an active admin session. Please log in with your Root Admin credentials to access the Email System Studio.
+          </p>
+          <a href="/admin/auth/login" style={{ padding: '10px 20px', backgroundColor: '#6366f1', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: '600', fontSize: '13px', display: 'inline-block' }}>
+            Go to Admin Login
+          </a>
+        </div>
       </AdminShell>
     );
   }
@@ -536,6 +584,113 @@ export default function StandaloneEmailPage() {
                               </button>
                             )}
                           </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 4: Delivery Analytics */}
+        {activeSubTab === 'analytics' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>Delivery Analytics & Send Logs</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textMuted, margin: '4px 0 0 0' }}>Real-time aggregate performance metrics and individual send history from the platform email pipeline.</p>
+              </div>
+              <button
+                onClick={() => loadSubTabData('analytics')}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 14px',
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  border: `1px solid ${tokens.colors.borderSubtle}`,
+                  borderRadius: '8px',
+                  color: tokens.colors.textPrimary,
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                <RefreshCw size={14} /> Refresh Analytics
+              </button>
+            </div>
+
+            {/* Metric Overview Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Total Sends</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: tokens.colors.textPrimary }}>{analytics?.total_sends ?? 0}</div>
+              </div>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Delivered / Sent</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#10b981' }}>{analytics?.sent_count ?? 0}</div>
+              </div>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Failed Sends</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#ef4444' }}>{analytics?.failed_count ?? 0}</div>
+              </div>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Bounced Sends</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#f59e0b' }}>{analytics?.bounced_count ?? 0}</div>
+              </div>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Open Rate</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#818cf8' }}>
+                  {analytics?.open_rate !== undefined ? `${Number(analytics.open_rate).toFixed(2)}%` : '0.00%'}
+                </div>
+              </div>
+              <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '10px', padding: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textMuted, marginBottom: '6px' }}>Click Rate</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: '#38bdf8' }}>
+                  {analytics?.click_rate !== undefined ? `${Number(analytics.click_rate).toFixed(2)}%` : '0.00%'}
+                </div>
+              </div>
+            </div>
+
+            {/* Individual Sends Log Table */}
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflow: 'hidden' }}>
+              <div style={{ padding: '14px 16px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, fontWeight: '700', fontSize: '14px', color: tokens.colors.textPrimary }}>
+                Individual Dispatch Log ({sends.length} records)
+              </div>
+              {dataLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading send history...</div>
+              ) : sends.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email dispatch events recorded yet.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: tokens.colors.bgDark, borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted }}>
+                      <th style={{ padding: '12px 16px' }}>Recipient Email</th>
+                      <th style={{ padding: '12px 16px' }}>Template Key</th>
+                      <th style={{ padding: '12px 16px' }}>Subject Line</th>
+                      <th style={{ padding: '12px 16px' }}>Status</th>
+                      <th style={{ padding: '12px 16px' }}>Sent Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sends.map((s, idx) => (
+                      <tr key={s.id || idx} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '600', color: tokens.colors.textPrimary }}>
+                          {s.recipient_email || s.recipient || 'N/A'}
+                        </td>
+                        <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: '#a5b4fc' }}>
+                          {s.template_key}
+                        </td>
+                        <td style={{ padding: '12px 16px', color: tokens.colors.textSecondary, maxWidth: '240px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {s.subject || '—'}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <StatusPill status={s.status || 'sent'} />
+                        </td>
+                        <td style={{ padding: '12px 16px', color: tokens.colors.textMuted, fontSize: '12px' }}>
+                          {s.sent_at ? new Date(s.sent_at).toLocaleString() : '—'}
                         </td>
                       </tr>
                     ))}
