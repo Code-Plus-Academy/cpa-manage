@@ -77,7 +77,7 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
 
     const { rows } = await client.query(
       `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked, is_active, created_by)
-       VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7, $8, $9)
+       VALUES ($1, $2, $3, $4, $5, $4, $5, $6::jsonb, $7, $8, $9)
        RETURNING *`,
       [key.trim(), name.trim(), category, subject_template, body_html_template, JSON.stringify(available_placeholders), !!is_system_locked, is_active, req.adminUser.id]
     );
@@ -144,7 +144,7 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
            category = COALESCE($2, category),
            draft_subject_template = $3,
            draft_body_html_template = $4,
-           available_placeholders = COALESCE($5, available_placeholders),
+           available_placeholders = COALESCE($5::jsonb, available_placeholders),
            is_active = COALESCE($6, is_active),
            updated_at = NOW()
        WHERE key = $7
