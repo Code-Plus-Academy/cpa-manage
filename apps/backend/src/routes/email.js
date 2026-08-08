@@ -244,6 +244,10 @@ router.post('/templates/:key/publish', requirePermission('email.templates.edit')
 
     await client.query('COMMIT');
 
+    // Invalidate Redis template cache so all backend instances update instantly (Option 1)
+    const { cacheDel } = require('../lib/redis');
+    await cacheDel(`email:template:${key}`).catch(() => {});
+
     res.json({ template: publishedTemplate, message: `Template ${key} published successfully as v${nextVersion}.` });
   } catch (err) {
     await client.query('ROLLBACK');
