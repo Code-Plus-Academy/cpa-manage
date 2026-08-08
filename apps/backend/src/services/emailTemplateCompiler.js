@@ -79,10 +79,10 @@ function sanitizeSubjectText(subjectTpl, payload = {}) {
     allowedTags: [],
     allowedAttributes: {},
   });
-  // Prevent CRLF SMTP Header Injection (replace \r and \n with space)
-  const noCRLF = strippedTags.replace(/[\r\n]+/g, ' ');
-  // Comprehensive entity decoding for non-ASCII, quotes, em-dashes
-  return decode(noCRLF);
+  // Decode HTML entities FIRST so &#13;&#10; / &#xD;&#xA; are fully expanded
+  const decoded = decode(strippedTags);
+  // Prevent CRLF SMTP Header Injection (replace \r and \n with space as the ABSOLUTE LAST STEP)
+  return decoded.replace(/[\r\n]+/g, ' ');
 }
 
 /**
