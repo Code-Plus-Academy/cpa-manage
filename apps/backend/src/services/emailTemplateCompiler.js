@@ -173,28 +173,32 @@ const CRITICAL_TEMPLATE_KEYS = new Set(['admin_registration_otp', 'password_rese
  * Hot-Path Email Send Function
  * Direct read from live columns (subject_template, body_html_template).
  */
-async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, userId = null }) {
+async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, userId = null, useDraft = false }) {
   try {
     let subjectTpl = DEFAULT_TEMPLATES[templateKey]?.subject || 'Notification from Code+ Academy';
     let bodyTpl = DEFAULT_TEMPLATES[templateKey]?.html || '<p>Hello {{display_name}}</p>';
     let availablePlaceholders = DEFAULT_TEMPLATES[templateKey]?.available_placeholders || [];
     let isCritical = CRITICAL_TEMPLATE_KEYS.has(templateKey);
 
-    // Direct single-row query from live columns (Hot Path — no joins)
+    // Direct single-row query from live & draft columns
     const { rows } = await query(
-      `SELECT subject_template, body_html_template, available_placeholders, is_system_locked 
+      `SELECT subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked 
        FROM email_templates 
        WHERE key = $1 AND is_active = true`,
       [templateKey]
     );
 
     if (rows.length > 0) {
-      if (rows[0].subject_template) subjectTpl = rows[0].subject_template;
-      if (rows[0].body_html_template) bodyTpl = rows[0].body_html_template;
-      if (rows[0].available_placeholders && Array.isArray(rows[0].available_placeholders)) {
-        availablePlaceholders = rows[0].available_placeholders;
+      const r = rows[0];
+      const effSubject = (useDraft && r.draft_subject_template) ? r.draft_subject_template : (r.subject_template || r.draft_subject_template);
+      const effBody = (useDraft && r.draft_body_html_template) ? r.draft_body_html_template : (r.body_html_template || r.draft_body_html_template);
+
+      if (effSubject) subjectTpl = effSubject;
+      if (effBody) bodyTpl = effBody;
+      if (r.available_placeholders && Array.isArray(r.available_placeholders)) {
+        availablePlaceholders = r.available_placeholders;
       }
-      if (rows[0].is_system_locked) isCritical = true;
+      if (r.is_system_locked) isCritical = true;
     }
 
     // Payload schema check

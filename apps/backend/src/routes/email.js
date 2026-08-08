@@ -326,6 +326,7 @@ router.post('/templates/:key/test-send', requirePermission('email.templates.edit
       recipientEmail: targetEmail,
       payload,
       userId: req.adminUser.id,
+      useDraft: true,
     });
 
     if (sentOk) {
