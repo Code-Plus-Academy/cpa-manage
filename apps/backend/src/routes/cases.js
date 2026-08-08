@@ -335,31 +335,23 @@ router.patch(
         }
       }
 
-      // Dispatch Automated Publisher Email Notification
+      // Dispatch Automated Publisher Email Notification via Queue Engine
       try {
         const targetEmail = ticket.reporter_email || ticket.publisher_email;
         if (targetEmail) {
-          const subject = `[Notice] Administrative Moderation Action Taken - Case #${ticket.id}`;
-          const bodyHtml = `
-            <div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;">
-              <h2 style="color: #4f46e5;">Code+ Academy Moderation Notice</h2>
-              <p>Hello,</p>
-              <p>An administrative moderation action (<strong>${action_type}</strong>) has been executed regarding content / case <strong>#${ticket.id}</strong>.</p>
-              <div style="background-color: #f8fafc; padding: 14px; border-left: 4px solid #4f46e5; margin: 16px 0; border-radius: 4px;">
-                <strong>Justification & Compliance Reason:</strong><br/>
-                ${reason}
-              </div>
-              ${action_type === 'temporary_takedown' ? '<p style="color: #d97706; font-weight: bold;">Note: Your content has been temporarily unlisted. You have 7 days to submit a counter-notice or response.</p>' : ''}
-              <p style="font-size: 13px; color: #64748b;">If you believe this decision was made in error, you may file an appeal through your creator dashboard.</p>
-              <p>Best regards,<br/><strong>Code+ Academy Trust & Safety Team</strong></p>
-            </div>
-          `;
-
-          await query(
-            `INSERT INTO email_sends (template_key, user_id, recipient_email, subject, body_html, status, sent_at)
-             VALUES ($1, $2, $3, $4, $5, 'sent', NOW())`,
-            ['moderation_action_notice', ticket.user_id || null, targetEmail, subject, bodyHtml]
-          );
+          const { enqueueTemplatedEmail } = require('../services/emailQueue');
+          enqueueTemplatedEmail({
+            templateKey: 'moderation_action_notice',
+            recipientEmail: targetEmail,
+            payload: {
+              name: ticket.publisher_name || 'Creator / User',
+              ticket_id: String(ticket.id),
+              action_type,
+              reason,
+              content_title: ticket.content_title || 'Content Item',
+            },
+            userId: ticket.user_id || null,
+          }).catch(err => console.warn('[cases.js] Moderation notice enqueuing failed:', err.message));
         }
       } catch (emailErr) {
         console.warn('[Publisher Notification Email Failed]:', emailErr.message);

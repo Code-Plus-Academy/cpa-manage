@@ -84,45 +84,6 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
       );
     }
 
-    // Fetch customizable template from email_templates table if available
-    let subject = `[Code+ Academy] Complete Your Worker Admin Registration - Verification OTP: ${otpCode}`;
-    let bodyHtml = `
-      <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
-        <h2 style="color: #6366f1;">Worker Admin Account Registration</h2>
-        <p>Hello ${display_name},</p>
-        <p>You have been invited to join the Code+ Academy Administration console as a Worker Admin.</p>
-        <p>Your 6-digit One-Time Registration Passcode (OTP) is:</p>
-        <div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">
-          ${otpCode}
-        </div>
-        <p style="font-size: 12px; color: #6b7280;">This OTP will expire in 15 minutes.</p>
-        <p>Best regards,<br/>Code+ Academy Administration</p>
-      </div>
-    `;
-
-    const { rows: tplRows } = await client.query(
-      `SELECT subject_template, body_html_template FROM email_templates WHERE key = 'admin_registration_otp' AND is_active = true`
-    );
-
-    if (tplRows.length > 0) {
-      const { subject_template, body_html_template } = tplRows[0];
-      subject = subject_template
-        .replace(/\{\{\s*display_name\s*\}\}/g, display_name)
-        .replace(/\{\{\s*otp_code\s*\}\}/g, otpCode)
-        .replace(/\{\{\s*expires_minutes\s*\}\}/g, '15');
-
-      bodyHtml = body_html_template
-        .replace(/\{\{\s*display_name\s*\}\}/g, display_name)
-        .replace(/\{\{\s*otp_code\s*\}\}/g, otpCode)
-        .replace(/\{\{\s*expires_minutes\s*\}\}/g, '15');
-    }
-
-    await client.query(
-      `INSERT INTO email_sends (template_key, user_id, recipient_email, subject, body_html, status, sent_at)
-       VALUES ('admin_registration_otp', $1, $2, $3, $4, 'sent', NOW())`,
-      [newAdmin.id, email.toLowerCase().trim(), subject, bodyHtml]
-    );
-
     // Same-transaction audit log (Ground Rule 6)
     await writeAuditLog(client, {
       actorAdminId: req.adminUser.id,
@@ -137,9 +98,9 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
 
     await client.query('COMMIT');
 
-    // Asynchronously compile customizable template from DB & dispatch physical email via Resend API
-    const { sendTemplatedEmail } = require('../services/emailTemplateCompiler');
-    sendTemplatedEmail({
+    // Asynchronously enqueue OTP invitation email through BullMQ with critical priority
+    const { enqueueTemplatedEmail } = require('../services/emailQueue');
+    enqueueTemplatedEmail({
       templateKey: 'admin_registration_otp',
       recipientEmail: email.toLowerCase().trim(),
       payload: {
@@ -150,9 +111,10 @@ router.post('/', requirePermission.rootOnly, async (req, res, next) => {
         expires_minutes: '15',
       },
       userId: newAdmin.id,
-    }).then(ok => {
-      console.log(`[admins.js] sendTemplatedEmail result for ${email}: ${ok ? 'SUCCESS' : 'FAILED'}`);
-    }).catch(err => console.error('[admins.js] Exception in sendTemplatedEmail:', err));
+      priority: 'critical',
+    }).then(job => {
+      console.log(`[admins.js] Enqueued OTP email job #${job?.id || 'direct'} for ${email}`);
+    }).catch(err => console.error('[admins.js] Exception enqueuing registration OTP email:', err));
 
     res.status(201).json({
       admin_user: { ...newAdmin, permissions: validPerms },

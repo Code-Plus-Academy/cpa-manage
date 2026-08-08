@@ -215,11 +215,13 @@ router.post('/templates/:key/publish', requirePermission('email.templates.edit')
       [key, existing.version, existing.subject_template, existing.body_html_template, req.adminUser.id]
     );
 
-    // Promote draft → live
+    // Promote draft → live and clear draft columns
     const { rows } = await client.query(
       `UPDATE email_templates
        SET subject_template = $1,
            body_html_template = $2,
+           draft_subject_template = NULL,
+           draft_body_html_template = NULL,
            version = $3,
            updated_at = NOW()
        WHERE key = $4

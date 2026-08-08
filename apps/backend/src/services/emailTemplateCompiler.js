@@ -68,11 +68,22 @@ const DEFAULT_TEMPLATES = {
 };
 
 /**
+ * Sanitize email subject line (Strips ALL HTML tags for plain text subject lines)
+ */
+function sanitizeSubjectText(subject) {
+  return sanitizeHtml(subject || '', {
+    allowedTags: [],
+    allowedAttributes: {},
+  });
+}
+
+/**
  * Sanitize final compiled HTML (Defense-in-depth)
  * Allows standard HTML email tags and inline styles while stripping dangerous script/iframe/object tags.
+ * Restricts data: URI scheme strictly to img src attributes.
  */
 function sanitizeCompiledHtml(html) {
-  return sanitizeHtml(html, {
+  return sanitizeHtml(html || '', {
     allowedTags: sanitizeHtml.defaults.allowedTags.concat([
       'img', 'style', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'td', 'th', 'h1', 'h2', 'h3', 'h4', 'hr', 'br', 'a', 'p', 'b', 'i', 'strong', 'em', 'ul', 'ol', 'li'
     ]),
@@ -81,7 +92,10 @@ function sanitizeCompiledHtml(html) {
       'a': ['href', 'title', 'target', 'rel'],
       'img': ['src', 'alt', 'title', 'width', 'height'],
     },
-    allowedSchemes: ['http', 'https', 'mailto', 'data'],
+    allowedSchemes: ['http', 'https', 'mailto'],
+    allowedSchemesByTag: {
+      img: ['http', 'https', 'mailto', 'data'],
+    },
   });
 }
 
@@ -102,6 +116,7 @@ function compileAndValidateTemplate({ subject_template, body_html_template, avai
   try {
     // 1. Precompile and test Subject
     const subjectCompiled = Handlebars.compile(subject_template || '')(mockPayload);
+    const sanitizedSubject = sanitizeSubjectText(subjectCompiled);
 
     // 2. Precompile and test Body HTML
     const bodyCompiled = Handlebars.compile(body_html_template || '')(mockPayload);
@@ -111,7 +126,7 @@ function compileAndValidateTemplate({ subject_template, body_html_template, avai
 
     return {
       isValid: true,
-      sampleSubject: subjectCompiled,
+      sampleSubject: sanitizedSubject,
       sampleBodyHtml: sanitizedBody,
     };
   } catch (err) {
@@ -134,6 +149,8 @@ function validatePayloadSchema(payload, requiredPlaceholders = []) {
   return missing;
 }
 
+const CRITICAL_TEMPLATE_KEYS = new Set(['admin_registration_otp', 'password_reset', '2fa_login_alert']);
+
 /**
  * Hot-Path Email Send Function
  * Direct read from live columns (subject_template, body_html_template).
@@ -143,10 +160,11 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     let subjectTpl = DEFAULT_TEMPLATES[templateKey]?.subject || 'Notification from Code+ Academy';
     let bodyTpl = DEFAULT_TEMPLATES[templateKey]?.html || '<p>Hello {{display_name}}</p>';
     let availablePlaceholders = DEFAULT_TEMPLATES[templateKey]?.available_placeholders || [];
+    let isCritical = CRITICAL_TEMPLATE_KEYS.has(templateKey);
 
     // Direct single-row query from live columns (Hot Path — no joins)
     const { rows } = await query(
-      `SELECT subject_template, body_html_template, available_placeholders 
+      `SELECT subject_template, body_html_template, available_placeholders, is_system_locked 
        FROM email_templates 
        WHERE key = $1 AND is_active = true`,
       [templateKey]
@@ -158,19 +176,27 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
       if (rows[0].available_placeholders && Array.isArray(rows[0].available_placeholders)) {
         availablePlaceholders = rows[0].available_placeholders;
       }
+      if (rows[0].is_system_locked) isCritical = true;
     }
 
     // Payload schema check
     const missingKeys = validatePayloadSchema(payload, availablePlaceholders);
     if (missingKeys.length > 0) {
-      console.warn(`[emailTemplateCompiler] WARNING: Missing payload keys [${missingKeys.join(', ')}] for template '${templateKey}'`);
+      const errorMsg = `[emailTemplateCompiler] CRITICAL PAYLOAD ERROR: Missing required keys [${missingKeys.join(', ')}] for template '${templateKey}' (userId: ${userId || 'N/A'})`;
+      if (isCritical) {
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      } else {
+        console.warn(`[emailTemplateCompiler] WARNING: Missing payload keys [${missingKeys.join(', ')}] for template '${templateKey}'`);
+      }
     }
 
     // Handlebars Compilation with auto-escaping for XSS protection
-    const compiledSubject = Handlebars.compile(subjectTpl)(payload);
+    const rawCompiledSubject = Handlebars.compile(subjectTpl)(payload);
     const rawCompiledBody = Handlebars.compile(bodyTpl)(payload);
 
     // Defense-in-depth HTML sanitization
+    const compiledSubject = sanitizeSubjectText(rawCompiledSubject);
     const compiledBody = sanitizeCompiledHtml(rawCompiledBody);
 
     // Physical dispatch via Resend SDK
@@ -198,6 +224,7 @@ module.exports = {
   sendTemplatedEmail,
   compileAndValidateTemplate,
   sanitizeCompiledHtml,
+  sanitizeSubjectText,
   validatePayloadSchema,
   DEFAULT_TEMPLATES,
 };

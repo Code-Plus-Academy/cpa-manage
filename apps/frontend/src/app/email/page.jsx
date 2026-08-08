@@ -561,10 +561,15 @@ export default function StandaloneEmailPage() {
                 </div>
               </div>
 
-              {/* Viewport Frame */}
+              {/* Sandboxed Viewport Frame */}
               <div style={{ display: 'flex', justifyContent: 'center', backgroundColor: '#f3f4f6', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
-                <div style={{ width: previewViewport === 'mobile' ? '375px' : '100%', transition: 'all 0.3s ease', backgroundColor: '#ffffff', border: previewViewport === 'mobile' ? '1px solid #9ca3af' : 'none', borderRadius: '8px', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                  <div dangerouslySetInnerHTML={{ __html: renderedBodyHtml }} />
+                <div style={{ width: previewViewport === 'mobile' ? '375px' : '100%', transition: 'all 0.3s ease', backgroundColor: '#ffffff', border: previewViewport === 'mobile' ? '1px solid #9ca3af' : 'none', borderRadius: '8px', padding: '8px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                  <iframe
+                    srcDoc={renderedBodyHtml}
+                    title="Email Live Preview Sandbox"
+                    sandbox="allow-same-origin"
+                    style={{ width: '100%', minHeight: '380px', border: 'none', backgroundColor: '#ffffff' }}
+                  />
                 </div>
               </div>
 

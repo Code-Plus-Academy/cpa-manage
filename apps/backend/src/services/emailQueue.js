@@ -67,27 +67,31 @@ try {
  * Push email dispatch job to BullMQ queue.
  * Falls back to direct async sendTemplatedEmail if Redis is unavailable.
  */
-async function queueEmailDispatch({ templateKey, recipientEmail, payload = {}, userId = null }) {
+async function enqueueTemplatedEmail({ templateKey, recipientEmail, payload = {}, userId = null, priority = 'normal' }) {
+  const jobOptions = priority === 'critical' ? { priority: 1 } : {};
   if (emailQueue && redisConnection && redisConnection.status === 'ready') {
     try {
-      const job = await emailQueue.add('send_templated_email', {
-        templateKey,
-        recipientEmail,
-        payload,
-        userId,
-      });
-      console.log(`[EmailQueue] Queued email job #${job.id} for ${recipientEmail}`);
-      return true;
+      const job = await emailQueue.add(
+        'send_templated_email',
+        { templateKey, recipientEmail, payload, userId },
+        jobOptions
+      );
+      console.log(`[EmailQueue] Enqueued email job #${job.id} (priority: ${priority}) for ${recipientEmail}`);
+      return job;
     } catch (err) {
       console.warn('[EmailQueue] Queue push failed, falling back to direct send:', err.message);
     }
   }
 
   // Fallback to direct async send
-  return sendTemplatedEmail({ templateKey, recipientEmail, payload, userId });
+  const sentOk = await sendTemplatedEmail({ templateKey, recipientEmail, payload, userId });
+  return { id: 'direct-fallback', status: sentOk ? 'sent' : 'failed' };
 }
 
+const queueEmailDispatch = enqueueTemplatedEmail;
+
 module.exports = {
+  enqueueTemplatedEmail,
   queueEmailDispatch,
   emailQueue,
   emailWorker,
