@@ -53,11 +53,41 @@ export default function StandaloneEmailPage() {
   const [renderedBodyHtml, setRenderedBodyHtml] = useState('');
   const [renderingPreview, setRenderingPreview] = useState(false);
 
+  // Live Debounced Placeholder Scanner & Validation
+  const [detectedFields, setDetectedFields] = useState([]);
+  const [invalidFields, setInvalidFields] = useState([]);
+
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  // 300ms Debounced scanner for Handlebars placeholder variables
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const combinedText = `${subjectTemplate} ${bodyHtmlTemplate}`;
+      const regex = /\{\{\s*[#\/]?([a-zA-Z0-9_.]+)/g;
+      const found = new Set();
+      const ignoredKeywords = new Set(['if', 'unless', 'each', 'with', 'else', 'this']);
+      let match;
+      while ((match = regex.exec(combinedText)) !== null) {
+        const varName = match[1];
+        if (!ignoredKeywords.has(varName)) {
+          found.add(varName);
+        }
+      }
+      const vars = Array.from(found);
+      setDetectedFields(vars);
+
+      const allowedList = editingTemplate?.available_placeholders || ['display_name', 'name', 'otp_code', 'expiry_minutes', 'position', 'startdate', 'action_link', 'ticket_id', 'action_type', 'reason'];
+      const allowedSet = new Set(allowedList);
+      const invalid = vars.filter(v => !allowedSet.has(v));
+      setInvalidFields(invalid);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [subjectTemplate, bodyHtmlTemplate, editingTemplate]);
 
   useEffect(() => {
     if (adminUser) {
@@ -306,11 +336,49 @@ export default function StandaloneEmailPage() {
     setTemplateActive(true);
   };
 
+  // Check if admin has email permissions or root access
+  /*
+   * NOTE: This client-side permission check is a UX convenience only to prevent displaying
+   * an interactive studio form to unauthorized admins. The backend API route guards in
+   * routes/email.js (e.g. requirePermission('email.templates.edit')) are the actual security
+   * enforcement boundary.
+   */
+  const hasEmailPermission = adminUser?.is_root || (adminUser?.permissions || []).some(p => p.startsWith('email.'));
+
+  if (loading) {
+    return (
+      <AdminShell title="Email System Studio" user={adminUser}>
+        <div style={{ padding: '60px 20px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading Email System Studio...</div>
+      </AdminShell>
+    );
+  }
+
+  if (!hasEmailPermission) {
+    return (
+      <AdminShell
+        title="Email System Studio"
+        subtitle="Access Restricted"
+        currentRoute="/email"
+        breadcrumb={['Communications', 'Email System']}
+        user={adminUser}
+      >
+        <div style={{ padding: '60px 20px', textAlign: 'center', backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
+          <Lock size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
+          <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, marginBottom: '8px' }}>403 — Access Restricted</h2>
+          <p style={{ fontSize: '14px', color: tokens.colors.textMuted, maxWidth: '480px', margin: '0 auto' }}>
+            Your admin account does not have permission to manage email templates or campaigns (<code style={{ color: '#818cf8' }}>email.templates.edit</code>). Please contact a Root Admin to request access.
+          </p>
+        </div>
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell
       title="Email System Studio"
       subtitle="Handlebars Email Compiler, Template Draft & Publish Engine, and Campaign Analytics"
       currentRoute="/email"
+      breadcrumb={['Communications', 'Email System']}
       user={adminUser}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -509,6 +577,28 @@ export default function StandaloneEmailPage() {
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Subject Line (Handlebars Template)</label>
                   <input type="text" required value={subjectTemplate} onChange={(e) => setSubjectTemplate(e.target.value)} placeholder="Welcome to CPA, {{display_name}}!" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
+                </div>
+
+                {/* Live Debounced Placeholder Scan & Mismatch Warning Badge */}
+                <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: invalidFields.length > 0 ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.12)', border: `1px solid ${invalidFields.length > 0 ? '#ef4444' : '#10b981'}`, fontSize: '12px' }}>
+                  <div style={{ fontWeight: '700', color: invalidFields.length > 0 ? '#f87171' : '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>Detected Placeholder Fields: {detectedFields.length}</span>
+                    {invalidFields.length > 0 && <span style={{ color: '#f87171', fontWeight: '800' }}>⚠️ Warning: {invalidFields.length} Unsupported Variable(s)</span>}
+                  </div>
+                  <div style={{ marginTop: '6px', color: tokens.colors.textMuted, fontSize: '11px', fontFamily: 'monospace', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {detectedFields.length === 0 ? (
+                      <span style={{ fontStyle: 'italic', color: '#9ca3af' }}>No &#123;&#123; variable &#125;&#125; tags found in template text.</span>
+                    ) : (
+                      detectedFields.map(v => {
+                        const isInvalid = invalidFields.includes(v);
+                        return (
+                          <span key={v} style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: isInvalid ? '#7f1d1d' : 'rgba(255,255,255,0.08)', color: isInvalid ? '#fca5a5' : '#a5b4fc', border: isInvalid ? '1px solid #ef4444' : 'none', fontWeight: isInvalid ? '700' : '400' }}>
+                            {isInvalid ? `⚠️ {{ ${v} }}` : `{{ ${v} }}`}
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
