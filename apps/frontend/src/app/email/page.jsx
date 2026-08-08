@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Mail, Calendar, Send, PieChart, Plus, RefreshCw, Eye, Edit3, Check, X, Clock, Play
+  Mail, Calendar, Send, PieChart, Plus, RefreshCw, Eye, Edit3, Check, X, Clock, Play, Lock, Smartphone, Monitor
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
@@ -32,30 +32,26 @@ export default function StandaloneEmailPage() {
   const [subjectTemplate, setSubjectTemplate] = useState('');
   const [bodyHtmlTemplate, setBodyHtmlTemplate] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
-  const [previewHtmlModal, setPreviewHtmlModal] = useState(null);
-
-  const handleDeleteTemplate = async (key) => {
-    if (!confirm(`Are you sure you want to delete template '${key}'?`)) return;
-    try {
-      const res = await fetch(`${apiUrl}/admin/email/templates/${key}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      if (res.ok) {
-        loadSubTabData('templates');
-      } else {
-        const data = await res.json();
-        alert(data.error?.message || data.message || 'Failed to delete template');
-      }
-    } catch (err) {
-      alert('Error deleting template');
-    }
-  };
-
-  // Campaign Modal Form
-  const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [campaignTemplateKey, setCampaignTemplateKey] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Server-Side Live Render Preview Modal
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewViewport, setPreviewViewport] = useState('desktop'); // 'desktop' | 'mobile'
+  const [mockPayloadJson, setMockPayloadJson] = useState(JSON.stringify({
+    display_name: 'Rahul Sharma',
+    name: 'Rahul Sharma',
+    otp_code: '849201',
+    expiry_minutes: '15',
+    position: 'Senior Backend Engineer',
+    startdate: '2026-09-01',
+    action_link: 'https://codeplusacademy.in/action',
+    ticket_id: '8492',
+    action_type: 'temporary_takedown',
+    reason: 'Copyright notice under DMCA section 512(c)'
+  }, null, 2));
+  const [renderedSubject, setRenderedSubject] = useState('');
+  const [renderedBodyHtml, setRenderedBodyHtml] = useState('');
+  const [renderingPreview, setRenderingPreview] = useState(false);
 
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
@@ -125,9 +121,9 @@ export default function StandaloneEmailPage() {
     }
   };
 
-  // Create or update template
-  const handleSaveTemplate = async (e) => {
-    e.preventDefault();
+  // Save Draft Template
+  const handleSaveDraftTemplate = async (e) => {
+    e?.preventDefault();
     setSubmitting(true);
 
     const isEdit = !!editingTemplate;
@@ -136,11 +132,20 @@ export default function StandaloneEmailPage() {
       : `${apiUrl}/admin/email/templates`;
     const method = isEdit ? 'PATCH' : 'POST';
 
+    let availablePlaceholders = [];
+    try {
+      const parsed = JSON.parse(mockPayloadJson);
+      availablePlaceholders = Object.keys(parsed);
+    } catch (e) {
+      availablePlaceholders = ['display_name', 'name', 'otp_code', 'position'];
+    }
+
     const payload = {
       name: templateName,
       category: templateCategory,
       subject_template: subjectTemplate,
       body_html_template: bodyHtmlTemplate,
+      available_placeholders: availablePlaceholders,
       is_active: templateActive,
     };
     if (!isEdit) payload.key = templateKey;
@@ -159,7 +164,7 @@ export default function StandaloneEmailPage() {
         return;
       }
 
-      alert(`Template '${data.template.key}' saved successfully.`);
+      alert(`Draft for template '${data.template.key}' saved successfully.`);
       setShowTemplateModal(false);
       resetTemplateForm();
       loadSubTabData('templates');
@@ -167,6 +172,111 @@ export default function StandaloneEmailPage() {
       alert(err.message || 'Network error saving template.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Publish Draft → Live Template
+  const handlePublishTemplate = async (key) => {
+    if (!confirm(`Are you sure you want to publish draft as live version for template '${key}'?`)) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/email/templates/${key}/publish`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || `Template ${key} published!`);
+        loadSubTabData('templates');
+      } else {
+        alert(data.error?.message || data.message || 'Publish failed.');
+      }
+    } catch (err) {
+      alert('Error publishing template');
+    }
+  };
+
+  // Delete Template
+  const handleDeleteTemplate = async (key) => {
+    if (!confirm(`Are you sure you want to delete template '${key}'?`)) return;
+    try {
+      const res = await fetch(`${apiUrl}/admin/email/templates/${key}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.ok) {
+        loadSubTabData('templates');
+      } else {
+        const data = await res.json();
+        alert(data.error?.message || data.message || 'Failed to delete template');
+      }
+    } catch (err) {
+      alert('Error deleting template');
+    }
+  };
+
+  // Send Test Mail to Admin Inbox
+  const handleSendTestMail = async (key) => {
+    let parsedPayload = {};
+    try {
+      parsedPayload = JSON.parse(mockPayloadJson);
+    } catch (e) {
+      parsedPayload = { display_name: adminUser?.display_name || 'Admin', name: adminUser?.display_name || 'Admin' };
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/admin/email/templates/${key}/test-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          recipient_email: adminUser?.email,
+          payload: parsedPayload,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(data.message || `Test email sent to ${adminUser?.email}!`);
+      } else {
+        alert(data.error?.message || data.message || 'Test send failed.');
+      }
+    } catch (err) {
+      alert('Error sending test email');
+    }
+  };
+
+  // Call Server-Side Handlebars Render Preview Endpoint
+  const triggerServerSidePreview = async (subTpl, bodyTpl) => {
+    setRenderingPreview(true);
+    let parsedPayload = {};
+    try {
+      parsedPayload = JSON.parse(mockPayloadJson);
+    } catch (e) {
+      parsedPayload = { display_name: 'Rahul Sharma', name: 'Rahul Sharma', otp_code: '849201' };
+    }
+
+    try {
+      const res = await fetch(`${apiUrl}/admin/email/templates/render-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          subject_template: subTpl || subjectTemplate,
+          body_html_template: bodyTpl || bodyHtmlTemplate,
+          payload: parsedPayload,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRenderedSubject(data.rendered_subject || '');
+        setRenderedBodyHtml(data.rendered_body_html || '');
+        setPreviewModalOpen(true);
+      } else {
+        alert(data.error?.message || 'Handlebars precompile error in template syntax.');
+      }
+    } catch (err) {
+      alert('Error rendering preview on server');
+    } finally {
+      setRenderingPreview(false);
     }
   };
 
@@ -181,8 +291,8 @@ export default function StandaloneEmailPage() {
     setTemplateKey(tpl.key);
     setTemplateName(tpl.name);
     setTemplateCategory(tpl.category);
-    setSubjectTemplate(tpl.subject_template);
-    setBodyHtmlTemplate(tpl.body_html_template);
+    setSubjectTemplate(tpl.draft_subject_template || tpl.subject_template);
+    setBodyHtmlTemplate(tpl.draft_body_html_template || tpl.body_html_template);
     setTemplateActive(tpl.is_active);
     setShowTemplateModal(true);
   };
@@ -196,107 +306,24 @@ export default function StandaloneEmailPage() {
     setTemplateActive(true);
   };
 
-  // Campaign create & send-now
-  const handleCreateCampaign = async (e) => {
-    e.preventDefault();
-    if (!campaignTemplateKey) return;
-    setSubmitting(true);
-
-    try {
-      const res = await fetch(`${apiUrl}/admin/email/campaigns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          template_key: campaignTemplateKey,
-          segment_filter: {},
-          status: 'draft',
-        }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error?.message || data.message || 'Failed to create campaign.');
-        return;
-      }
-
-      alert('Campaign draft created successfully.');
-      setShowCampaignModal(false);
-      setCampaignTemplateKey('');
-      loadSubTabData('campaigns');
-    } catch (err) {
-      alert(err.message || 'Error creating campaign.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleSendCampaignNow = async (campaignId) => {
-    if (!confirm('Are you sure you want to trigger immediate sending for this campaign?')) return;
-    try {
-      const res = await fetch(`${apiUrl}/admin/email/campaigns/${campaignId}/send-now`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error?.message || data.message || 'Failed to trigger campaign send.');
-        return;
-      }
-      alert('Campaign queued for immediate dispatch.');
-      loadSubTabData('campaigns');
-    } catch (err) {
-      alert('Error triggering send-now.');
-    }
-  };
-
   return (
     <AdminShell
-      adminUser={adminUser}
-      activeTab="email"
-      breadcrumb={['Communications', 'Email System']}
+      title="Email System Studio"
+      subtitle="Handlebars Email Compiler, Template Draft & Publish Engine, and Campaign Analytics"
+      currentRoute="/email"
+      user={adminUser}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {/* Header Title */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1 style={{ fontSize: tokens.typography.title.fontSize, fontWeight: tokens.typography.title.fontWeight, color: tokens.colors.textPrimary, margin: 0 }}>
-              Email System & Broadcast Console
-            </h1>
-            <p style={{ fontSize: tokens.typography.small.fontSize, color: tokens.colors.textSecondary, margin: '4px 0 0 0' }}>
-              Manage HTML templates, automated trigger schedules, promotional campaigns, and send analytics
-            </p>
-          </div>
-          <button
-            onClick={() => loadSubTabData(activeSubTab)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '8px 14px',
-              borderRadius: '6px',
-              backgroundColor: tokens.colors.surfaceElevated,
-              border: `1px solid ${tokens.colors.borderSubtle}`,
-              color: tokens.colors.textPrimary,
-              fontSize: '13px',
-              cursor: 'pointer',
-            }}
-          >
-            <RefreshCw size={14} className={dataLoading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-        </div>
-
-        {/* Sub-Navigation Tabs */}
-        <div style={{ display: 'flex', gap: '8px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {/* Navigation Tabs */}
+        <div style={{ display: 'flex', gap: '12px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, paddingBottom: '12px' }}>
           {[
             { id: 'templates', label: 'Email Templates', icon: Mail },
-            { id: 'schedules', label: 'Trigger Schedules', icon: Calendar },
+            { id: 'schedules', label: 'Automated Schedules', icon: Calendar },
             { id: 'campaigns', label: 'Broadcast Campaigns', icon: Send },
-            { id: 'analytics', label: 'Delivery Analytics', icon: PieChart },
+            { id: 'analytics', label: 'Delivery Analytics', icon: PieChart }
           ].map(tab => {
             const Icon = tab.icon;
-            const isActive = activeSubTab === tab.id;
+            const active = activeSubTab === tab.id;
             return (
               <button
                 key={tab.id}
@@ -308,95 +335,133 @@ export default function StandaloneEmailPage() {
                   padding: '8px 16px',
                   borderRadius: '6px',
                   border: 'none',
-                  backgroundColor: isActive ? tokens.colors.primary : 'transparent',
-                  color: isActive ? '#FFFFFF' : tokens.colors.textSecondary,
+                  backgroundColor: active ? tokens.colors.primary : 'transparent',
+                  color: active ? '#FFFFFF' : tokens.colors.textMuted,
                   fontSize: '13px',
-                  fontWeight: isActive ? '700' : '500',
+                  fontWeight: '600',
                   cursor: 'pointer',
+                  transition: 'all 0.2s ease'
                 }}
               >
-                <Icon size={15} />
+                <Icon size={16} />
                 {tab.label}
               </button>
             );
           })}
         </div>
 
-        {/* SUB-TAB 1: TEMPLATES */}
+        {/* Tab 1: Email Templates */}
         {activeSubTab === 'templates' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: tokens.colors.textSecondary }}>System Email Templates</span>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>System Email Templates</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textMuted, margin: '4px 0 0 0' }}>Manage Handlebars dynamic templates across Auth, Hiring, Support, and Social activity.</p>
+              </div>
               <button
                 onClick={openCreateTemplateModal}
                 style={{
-                  display: 'inline-flex',
+                  display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '8px 14px',
-                  borderRadius: '6px',
+                  gap: '8px',
+                  padding: '10px 18px',
                   backgroundColor: tokens.colors.primary,
-                  border: 'none',
                   color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '8px',
                   fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
+                  fontWeight: '700',
+                  cursor: 'pointer'
                 }}
               >
-                <Plus size={14} /> New Template
+                <Plus size={16} />
+                Create Template
               </button>
             </div>
 
-            <div style={{ borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflow: 'hidden' }}>
               {dataLoading ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading templates...</div>
               ) : templates.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email templates found. Create one to get started.</div>
+                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email templates found in system database.</div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                   <thead>
-                    <tr style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: 'rgba(15, 23, 42, 0.4)', color: tokens.colors.textMuted }}>
-                      <th style={{ padding: '12px 16px' }}>KEY</th>
-                      <th style={{ padding: '12px 16px' }}>NAME</th>
-                      <th style={{ padding: '12px 16px' }}>CATEGORY</th>
-                      <th style={{ padding: '12px 16px' }}>SUBJECT TEMPLATE</th>
-                      <th style={{ padding: '12px 16px' }}>VERSION</th>
-                      <th style={{ padding: '12px 16px' }}>STATUS</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTION</th>
+                    <tr style={{ backgroundColor: tokens.colors.bgDark, borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted }}>
+                      <th style={{ padding: '12px 16px' }}>Template Key & Name</th>
+                      <th style={{ padding: '12px 16px' }}>Category</th>
+                      <th style={{ padding: '12px 16px' }}>Subject Line</th>
+                      <th style={{ padding: '12px 16px' }}>Version & Status</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {templates.map(t => (
-                      <tr key={t.id} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
-                        <td style={{ padding: '12px 16px', fontFamily: tokens.typography.mono.fontFamily, fontWeight: '700', color: tokens.colors.primary }}>{t.key}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: '600', color: tokens.colors.textPrimary }}>{t.name}</td>
-                        <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: tokens.colors.textSecondary }}>{t.category}</td>
-                        <td style={{ padding: '12px 16px', color: tokens.colors.textSecondary }}>{t.subject_template}</td>
-                        <td style={{ padding: '12px 16px' }}>v{t.version}</td>
-                        <td style={{ padding: '12px 16px' }}><StatusPill status={t.is_active ? 'approved' : 'dismissed'} /></td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                    {templates.map(tpl => (
+                      <tr key={tpl.key} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ fontWeight: '700', color: tokens.colors.textPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            {tpl.name}
+                            {tpl.is_system_locked && (
+                              <span title="System Locked Template" style={{ color: '#f59e0b', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                <Lock size={12} /> System Locked
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '11px', color: tokens.colors.textMuted, fontFamily: 'monospace' }}>{tpl.key}</div>
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{ textTransform: 'capitalize', fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                            {tpl.category}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', color: tokens.colors.textPrimary, maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {tpl.subject_template}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.08)', color: '#a5b4fc' }}>
+                              v{tpl.version || 1}
+                            </span>
+                            <StatusPill status={tpl.is_active ? 'active' : 'inactive'} />
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                             <button
-                              onClick={() => setPreviewHtmlModal(t.body_html_template)}
-                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: '#38bdf8', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              title="Preview Live HTML"
+                              onClick={() => triggerServerSidePreview(tpl.subject_template, tpl.body_html_template)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              title="Server-Side Preview"
                             >
-                              <Eye size={12} /> Preview
+                              <Eye size={14} /> Preview
                             </button>
                             <button
-                              onClick={() => openEditTemplateModal(t)}
-                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              title="Edit Template"
+                              onClick={() => handleSendTestMail(tpl.key)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: 'none', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}
+                              title="Send Test Email to Admin"
                             >
-                              <Edit3 size={12} /> Edit
+                              <Send size={14} /> Test Send
                             </button>
                             <button
-                              onClick={() => handleDeleteTemplate(t.key)}
-                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '12px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                              title="Delete Template"
+                              onClick={() => openEditTemplateModal(tpl)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}
                             >
-                              <X size={12} /> Delete
+                              <Edit3 size={14} /> Edit Draft
                             </button>
+                            <button
+                              onClick={() => handlePublishTemplate(tpl.key)}
+                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#6366f1', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}
+                              title="Promote Draft to Live"
+                            >
+                              <Check size={14} /> Publish
+                            </button>
+                            {!tpl.is_system_locked && (
+                              <button
+                                onClick={() => handleDeleteTemplate(tpl.key)}
+                                style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -408,196 +473,48 @@ export default function StandaloneEmailPage() {
           </div>
         )}
 
-        {/* SUB-TAB 2: SCHEDULES */}
-        {activeSubTab === 'schedules' && (
-          <div style={{ borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
-            {dataLoading ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading schedules...</div>
-            ) : schedules.length === 0 ? (
-              <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No trigger schedules configured.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: 'rgba(15, 23, 42, 0.4)', color: tokens.colors.textMuted }}>
-                    <th style={{ padding: '12px 16px' }}>TEMPLATE KEY</th>
-                    <th style={{ padding: '12px 16px' }}>TRIGGER TYPE</th>
-                    <th style={{ padding: '12px 16px' }}>FREQUENCY KIND</th>
-                    <th style={{ padding: '12px 16px' }}>INTERVAL / CRON</th>
-                    <th style={{ padding: '12px 16px' }}>RANDOM WINDOW</th>
-                    <th style={{ padding: '12px 16px' }}>STATUS</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {schedules.map(s => (
-                    <tr key={s.id} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
-                      <td style={{ padding: '12px 16px', fontFamily: tokens.typography.mono.fontFamily, fontWeight: '700', color: tokens.colors.primary }}>{s.template_key}</td>
-                      <td style={{ padding: '12px 16px', textTransform: 'uppercase', fontSize: '11px', fontWeight: '700', color: '#60A5FA' }}>{s.trigger_type}</td>
-                      <td style={{ padding: '12px 16px', textTransform: 'capitalize', color: tokens.colors.textSecondary }}>{s.frequency_kind}</td>
-                      <td style={{ padding: '12px 16px', fontFamily: tokens.typography.mono.fontFamily }}>
-                        {s.cron_expression ? `Cron: ${s.cron_expression}` : s.interval_value ? `${s.interval_value} ${s.interval_unit}` : 'Event-Driven'}
-                      </td>
-                      <td style={{ padding: '12px 16px', color: tokens.colors.textMuted }}>±{s.randomize_window_minutes || 0} mins</td>
-                      <td style={{ padding: '12px 16px' }}><StatusPill status={s.is_active ? 'approved' : 'dismissed'} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-
-        {/* SUB-TAB 3: CAMPAIGNS */}
-        {activeSubTab === 'campaigns' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '13px', color: tokens.colors.textSecondary }}>Promotional & Announcement Campaigns</span>
-              <button
-                onClick={() => { setCampaignTemplateKey(templates[0]?.key || ''); setShowCampaignModal(true); }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
-              >
-                <Plus size={14} /> Create Campaign
-              </button>
-            </div>
-
-            <div style={{ borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
-              {dataLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading campaigns...</div>
-              ) : campaigns.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No campaigns created.</div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: 'rgba(15, 23, 42, 0.4)', color: tokens.colors.textMuted }}>
-                      <th style={{ padding: '12px 16px' }}>CAMPAIGN ID</th>
-                      <th style={{ padding: '12px 16px' }}>TEMPLATE KEY</th>
-                      <th style={{ padding: '12px 16px' }}>STATUS</th>
-                      <th style={{ padding: '12px 16px' }}>SCHEDULED AT</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {campaigns.map(c => (
-                      <tr key={c.id} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
-                        <td style={{ padding: '12px 16px', fontFamily: tokens.typography.mono.fontFamily }}>{c.id}</td>
-                        <td style={{ padding: '12px 16px', fontWeight: '700', color: tokens.colors.primary }}>{c.template_key}</td>
-                        <td style={{ padding: '12px 16px' }}><StatusPill status={c.status} /></td>
-                        <td style={{ padding: '12px 16px', color: tokens.colors.textMuted }}>{c.scheduled_at ? new Date(c.scheduled_at).toLocaleString() : 'Not Scheduled'}</td>
-                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                          {c.status === 'draft' && (
-                            <button
-                              onClick={() => handleSendCampaignNow(c.id)}
-                              style={{ padding: '5px 10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              <Play size={12} /> Send Now
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* SUB-TAB 4: ANALYTICS */}
-        {activeSubTab === 'analytics' && analytics && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Metric Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-              <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                <span style={{ fontSize: '11px', color: tokens.colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>Total Sends</span>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', color: tokens.colors.textPrimary, margin: '6px 0 0 0' }}>{analytics.total_sends}</h2>
-              </div>
-              <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                <span style={{ fontSize: '11px', color: tokens.colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>Open Rate</span>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#34D399', margin: '6px 0 0 0' }}>{analytics.open_rate}%</h2>
-              </div>
-              <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                <span style={{ fontSize: '11px', color: tokens.colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>Click Rate</span>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#60A5FA', margin: '6px 0 0 0' }}>{analytics.click_rate}%</h2>
-              </div>
-              <div style={{ padding: '16px', borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                <span style={{ fontSize: '11px', color: tokens.colors.textMuted, textTransform: 'uppercase', fontWeight: '700' }}>Bounced / Failed</span>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#F87171', margin: '6px 0 0 0' }}>{analytics.bounced_count + analytics.failed_count}</h2>
-              </div>
-            </div>
-
-            {/* Sends Log Table */}
-            <div style={{ borderRadius: '10px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
-              <div style={{ padding: '14px 16px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, fontWeight: '700', fontSize: '13px', color: tokens.colors.textPrimary }}>
-                Recent Email Dispatch Log
-              </div>
-              {sends.length === 0 ? (
-                <div style={{ padding: '30px', textAlign: 'center', color: tokens.colors.textMuted }}>No email dispatches recorded yet.</div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: 'rgba(15, 23, 42, 0.4)', color: tokens.colors.textMuted }}>
-                      <th style={{ padding: '10px 16px' }}>SEND ID</th>
-                      <th style={{ padding: '10px 16px' }}>USER ID</th>
-                      <th style={{ padding: '10px 16px' }}>TEMPLATE</th>
-                      <th style={{ padding: '10px 16px' }}>STATUS</th>
-                      <th style={{ padding: '10px 16px' }}>DISPATCHED AT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sends.map(s => (
-                      <tr key={s.id} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
-                        <td style={{ padding: '10px 16px', fontFamily: tokens.typography.mono.fontFamily }}>{s.id}</td>
-                        <td style={{ padding: '10px 16px', color: tokens.colors.textSecondary }}>{s.user_id || 'System'}</td>
-                        <td style={{ padding: '10px 16px', fontWeight: '600', color: tokens.colors.primary }}>{s.template_key}</td>
-                        <td style={{ padding: '10px 16px' }}><StatusPill status={s.status} /></td>
-                        <td style={{ padding: '10px 16px', color: tokens.colors.textMuted }}>{s.sent_at ? new Date(s.sent_at).toLocaleString() : 'Queued'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Template Modal */}
+        {/* Template Create / Edit Modal */}
         {showTemplateModal && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ width: '100%', maxWidth: '680px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: '100%', maxWidth: '720px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>
-                  {editingTemplate ? 'Edit Email Template' : 'Create Email Template'}
+                  {editingTemplate ? `Edit Template Draft (${templateKey})` : 'Create New Email Template'}
                 </h3>
                 <button onClick={() => setShowTemplateModal(false)} style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer' }}><X size={18} /></button>
               </div>
 
-              <form onSubmit={handleSaveTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <form onSubmit={handleSaveDraftTemplate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 {!editingTemplate && (
                   <div>
                     <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Template Key (Unique Identifier)</label>
-                    <input type="text" required value={templateKey} onChange={(e) => setTemplateKey(e.target.value)} placeholder="e.g. welcome_user, pass_reset" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
+                    <input type="text" required value={templateKey} onChange={(e) => setTemplateKey(e.target.value)} placeholder="e.g. welcome_user, hiring_offer_letter" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
                   </div>
                 )}
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Template Display Name</label>
-                  <input type="text" required value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g. Welcome Onboarding Email" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
+                  <input type="text" required value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g. Hiring Offer Letter Template" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Category</label>
                   <select value={templateCategory} onChange={(e) => setTemplateCategory(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}>
                     <option value="transactional">Transactional</option>
-                    <option value="security">Security</option>
+                    <option value="security">Security / Auth</option>
+                    <option value="hiring">Careers & Hiring</option>
+                    <option value="support">Trust & Safety / Support</option>
+                    <option value="social">Social Activity</option>
                     <option value="promotional">Promotional</option>
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Subject Line Template</label>
-                  <input type="text" required value={subjectTemplate} onChange={(e) => setSubjectTemplate(e.target.value)} placeholder="Welcome to CPA, {{user_name}}!" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Subject Line (Handlebars Template)</label>
+                  <input type="text" required value={subjectTemplate} onChange={(e) => setSubjectTemplate(e.target.value)} placeholder="Welcome to CPA, {{display_name}}!" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }} />
                 </div>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                    <label style={{ fontSize: '12px', color: tokens.colors.textMuted }}>HTML Body Template</label>
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {['{{ user_name }}', '{{ action_link }}', '{{ content_title }}', '{{ reason }}', '{{ date }}'].map(tag => (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', color: tokens.colors.textMuted }}>HTML Body (Handlebars Auto-Escaped XSS Safe)</label>
+                    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                      {['{{display_name}}', '{{otp_code}}', '{{position}}', '{{startdate}}', '{{friend_name}}', '{{#each suggested_friends}}', '{{#if condition}}'].map(tag => (
                         <button
                           key={tag}
                           type="button"
@@ -609,18 +526,14 @@ export default function StandaloneEmailPage() {
                       ))}
                     </div>
                   </div>
-                  <textarea required rows={7} value={bodyHtmlTemplate} onChange={(e) => setBodyHtmlTemplate(e.target.value)} placeholder="<h1>Welcome {{user_name}}</h1><p>Thank you for joining Code Plus Academy.</p>" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', resize: 'vertical', fontFamily: 'monospace' }} />
+                  <textarea required rows={8} value={bodyHtmlTemplate} onChange={(e) => setBodyHtmlTemplate(e.target.value)} placeholder="<div style='font-family: Arial;'><h2>Hello {{display_name}}</h2></div>" style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', resize: 'vertical', fontFamily: 'monospace' }} />
                 </div>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: tokens.colors.textPrimary, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={templateActive} onChange={(e) => setTemplateActive(e.target.checked)} />
-                  <span>Is Active</span>
-                </label>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  <button type="button" onClick={() => setPreviewHtmlModal(bodyHtmlTemplate)} style={{ flex: 1, padding: '10px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: '#FFFFFF', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                    Preview Live HTML
+                  <button type="button" onClick={() => triggerServerSidePreview(subjectTemplate, bodyHtmlTemplate)} style={{ flex: 1, padding: '10px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: '#FFFFFF', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                    {renderingPreview ? 'Compiling Preview...' : 'Live Handlebars Preview'}
                   </button>
                   <button type="submit" disabled={submitting} style={{ flex: 1, padding: '10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                    {submitting ? 'Saving Template...' : 'Save Email Template'}
+                    {submitting ? 'Saving Draft...' : 'Save Draft Version'}
                   </button>
                 </div>
               </form>
@@ -628,38 +541,49 @@ export default function StandaloneEmailPage() {
           </div>
         )}
 
-        {/* Live HTML Preview Modal Overlay */}
-        {previewHtmlModal && (
+        {/* Server-Side Handlebars Render Preview Modal Overlay */}
+        {previewModalOpen && (
           <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(6px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ width: '100%', maxWidth: '750px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ width: '100%', maxWidth: '850px', backgroundColor: '#ffffff', color: '#111827', borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)', maxHeight: '90vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e5e7eb', paddingBottom: '12px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#111827', margin: 0 }}>Live Email Render Preview</h3>
-                <button onClick={() => setPreviewHtmlModal(null)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 12px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600' }}>Close Preview</button>
-              </div>
-              <div dangerouslySetInnerHTML={{ __html: previewHtmlModal.replace(/\{\{\s*user_name\s*\}\}/g, 'Alex Turner').replace(/\{\{\s*action_link\s*\}\}/g, 'https://codeplusacademy.in/action').replace(/\{\{\s*date\s*\}\}/g, new Date().toLocaleDateString()) }} />
-            </div>
-          </div>
-        )}
-
-        {/* Campaign Modal */}
-        {showCampaignModal && (
-          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-            <div style={{ width: '100%', maxWidth: '480px', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>Create Broadcast Campaign</h3>
-                <button onClick={() => setShowCampaignModal(false)} style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer' }}><X size={18} /></button>
-              </div>
-              <form onSubmit={handleCreateCampaign} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Select Email Template</label>
-                  <select value={campaignTemplateKey} onChange={(e) => setCampaignTemplateKey(e.target.value)} style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}>
-                    {templates.map(t => <option key={t.key} value={t.key}>{t.name} ({t.key})</option>)}
-                  </select>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#111827', margin: 0 }}>Server-Side Handlebars Render Preview</h3>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>Subject: <strong>{renderedSubject}</strong></div>
                 </div>
-                <button type="submit" disabled={submitting} style={{ width: '100%', padding: '10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                  {submitting ? 'Creating Campaign...' : 'Save Campaign Draft'}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <button onClick={() => setPreviewViewport('desktop')} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: previewViewport === 'desktop' ? '#3b82f6' : '#fff', color: previewViewport === 'desktop' ? '#fff' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                    <Monitor size={14} /> Desktop
+                  </button>
+                  <button onClick={() => setPreviewViewport('mobile')} style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d1d5db', backgroundColor: previewViewport === 'mobile' ? '#3b82f6' : '#fff', color: previewViewport === 'mobile' ? '#fff' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
+                    <Smartphone size={14} /> Mobile (375px)
+                  </button>
+                  <button onClick={() => setPreviewModalOpen(false)} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '6px', cursor: 'pointer', fontWeight: '600', fontSize: '12px' }}>Close</button>
+                </div>
+              </div>
+
+              {/* Viewport Frame */}
+              <div style={{ display: 'flex', justifyContent: 'center', backgroundColor: '#f3f4f6', padding: '16px', borderRadius: '8px', marginBottom: '16px' }}>
+                <div style={{ width: previewViewport === 'mobile' ? '375px' : '100%', transition: 'all 0.3s ease', backgroundColor: '#ffffff', border: previewViewport === 'mobile' ? '1px solid #9ca3af' : 'none', borderRadius: '8px', padding: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+                  <div dangerouslySetInnerHTML={{ __html: renderedBodyHtml }} />
+                </div>
+              </div>
+
+              {/* JSON Mock Payload Inspector */}
+              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px' }}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: '#374151', marginBottom: '4px' }}>Mock Payload JSON (Test Dynamic Placeholders):</label>
+                <textarea
+                  rows={4}
+                  value={mockPayloadJson}
+                  onChange={(e) => setMockPayloadJson(e.target.value)}
+                  style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #d1d5db', fontFamily: 'monospace', fontSize: '12px' }}
+                />
+                <button
+                  onClick={() => triggerServerSidePreview(subjectTemplate, bodyHtmlTemplate)}
+                  style={{ marginTop: '8px', padding: '6px 14px', borderRadius: '6px', backgroundColor: '#10b981', color: '#fff', border: 'none', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}
+                >
+                  Re-Render Preview with Updated Payload
                 </button>
-              </form>
+              </div>
             </div>
           </div>
         )}

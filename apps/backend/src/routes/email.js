@@ -291,6 +291,51 @@ router.delete('/templates/:key', requirePermission('email.templates.edit'), asyn
   }
 });
 
+// POST /admin/email/templates/render-preview — Test Handlebars render with mock payload
+router.post('/templates/render-preview', requirePermission.any(['email.templates.edit', 'email.analytics.view']), async (req, res, next) => {
+  try {
+    const { subject_template, body_html_template, payload = {} } = req.body;
+    const Handlebars = require('handlebars');
+    const { sanitizeCompiledHtml } = require('../services/emailTemplateCompiler');
+
+    const renderedSubject = Handlebars.compile(subject_template || '')(payload);
+    const rawBody = Handlebars.compile(body_html_template || '')(payload);
+    const renderedBody = sanitizeCompiledHtml(rawBody);
+
+    res.json({
+      rendered_subject: renderedSubject,
+      rendered_body_html: renderedBody,
+    });
+  } catch (err) {
+    res.status(400).json({ error: { message: err.message } });
+  }
+});
+
+// POST /admin/email/templates/:key/test-send — Send real test email to admin inbox
+router.post('/templates/:key/test-send', requirePermission('email.templates.edit'), async (req, res, next) => {
+  try {
+    const { key } = req.params;
+    const { recipient_email, payload = {} } = req.body;
+    const { sendTemplatedEmail } = require('../services/emailTemplateCompiler');
+
+    const targetEmail = recipient_email || req.adminUser.email;
+    const sentOk = await sendTemplatedEmail({
+      templateKey: key,
+      recipientEmail: targetEmail,
+      payload,
+      userId: req.adminUser.id,
+    });
+
+    if (sentOk) {
+      res.json({ message: `Test email sent successfully to ${targetEmail}.` });
+    } else {
+      res.status(500).json({ error: { message: `Failed to send test email to ${targetEmail}.` } });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── SCHEDULES ─────────────────────────────────────────────────────────────────
 
 // GET /admin/email/schedules
