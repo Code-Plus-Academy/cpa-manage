@@ -167,9 +167,13 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
 
     await client.query('COMMIT');
 
-    // Invalidate Redis template cache on draft save
-    const { cacheDel } = require('../lib/redis');
-    await cacheDel(`email:template:${key}`).catch(() => {});
+    // Write fresh draft template directly into Upstash Redis (86400s TTL)
+    const { cacheSet } = require('../lib/redis');
+    const redisTpl = {
+      subject_template: updatedTemplate.draft_subject_template || updatedTemplate.subject_template,
+      body_html_template: updatedTemplate.draft_body_html_template || updatedTemplate.body_html_template,
+    };
+    await cacheSet(`email:template:${key}`, JSON.stringify(redisTpl), 86400).catch(() => {});
     notifyMainBackend(key);
 
     res.json({ template: updatedTemplate });
@@ -277,9 +281,13 @@ router.post('/templates/:key/publish', requirePermission('email.templates.edit')
 
     await client.query('COMMIT');
 
-    // Invalidate Redis template cache so all backend instances update instantly (Option 1)
-    const { cacheDel } = require('../lib/redis');
-    await cacheDel(`email:template:${key}`).catch(() => {});
+    // Write fresh published template directly into Upstash Redis (86400s TTL)
+    const { cacheSet } = require('../lib/redis');
+    const redisTpl = {
+      subject_template: publishedTemplate.subject_template,
+      body_html_template: publishedTemplate.body_html_template,
+    };
+    await cacheSet(`email:template:${key}`, JSON.stringify(redisTpl), 86400).catch(() => {});
     notifyMainBackend(key);
 
     res.json({ template: publishedTemplate, message: `Template ${key} published successfully as v${nextVersion}.` });
