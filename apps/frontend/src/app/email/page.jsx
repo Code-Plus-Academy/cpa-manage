@@ -192,17 +192,19 @@ export default function StandaloneEmailPage() {
     setSubmitting(true);
 
     const isEdit = !!editingTemplate;
-    const url = isEdit
-      ? `${apiUrl}/admin/email/templates/${editingTemplate.key}`
-      : `${apiUrl}/admin/email/templates`;
+    const endpoint = isEdit
+      ? `/admin/email/templates/${editingTemplate.key}`
+      : `/admin/email/templates`;
     const method = isEdit ? 'PATCH' : 'POST';
 
-    let availablePlaceholders = [];
-    try {
-      const parsed = JSON.parse(mockPayloadJson);
-      availablePlaceholders = Object.keys(parsed);
-    } catch (e) {
-      availablePlaceholders = ['display_name', 'name', 'otp_code', 'position'];
+    let availablePlaceholders = detectedFields.length > 0 ? detectedFields : [];
+    if (availablePlaceholders.length === 0) {
+      try {
+        const parsed = JSON.parse(mockPayloadJson);
+        availablePlaceholders = Object.keys(parsed);
+      } catch (e) {
+        availablePlaceholders = ['display_name', 'name', 'otp_code', 'position'];
+      }
     }
 
     const payload = {
@@ -216,10 +218,8 @@ export default function StandaloneEmailPage() {
     if (!isEdit) payload.key = templateKey;
 
     try {
-      const res = await fetch(url, {
+      const res = await apiFetch(endpoint, {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
