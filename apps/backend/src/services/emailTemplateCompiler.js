@@ -18,10 +18,20 @@ const DEFAULT_TEMPLATES = {
     html: '<div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;"><h2 style="color: #6366f1;">Worker Admin Account Registration</h2><p>Hello <strong>{{display_name}}</strong>,</p><p>You have been invited to join the Code+ Academy Administration console as a Worker Admin.</p><p>Your 6-digit One-Time Registration Passcode (OTP) is:</p><div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">{{otp_code}}</div><p style="font-size: 12px; color: #6b7280;">This OTP will expire in {{expiry_minutes}} minutes.</p><p>Best regards,<br/>Code+ Academy Administration</p></div>',
     available_placeholders: ['display_name', 'otp_code', 'expiry_minutes'],
   },
+  user_registration_otp: {
+    subject: '[Code+ Academy] Verify Your Account - Verification Code: {{otp_code}}',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #6366f1;">Welcome to Code+ Academy</h2><p>Hello <strong>{{display_name}}</strong>,</p><p>Thank you for signing up. Your 6-digit email verification code is:</p><div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">{{otp_code}}</div><p style="font-size: 12px; color: #64748b;">This OTP code will expire in {{expiry_minutes}} minutes.</p><p>Best regards,<br/>Code+ Academy Team</p></div>',
+    available_placeholders: ['display_name', 'otp_code', 'expiry_minutes'],
+  },
   password_reset: {
     subject: '[Code+ Academy] Reset Your Account Password',
     html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6;"><h2 style="color: #4f46e5;">Password Reset Request</h2><p>Hello {{name}},</p><p>We received a request to reset your password. Click the link below to set a new password:</p><p><a href="{{reset_url}}" style="background: #4f46e5; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password</a></p><p style="font-size: 12px; color: #64748b;">If you did not request this, please ignore this email.</p></div>',
     available_placeholders: ['name', 'reset_url'],
+  },
+  content_published_confirmation: {
+    subject: '🎉 Your {{content_type}} "{{content_title}}" is Now Live!',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #10b981;">Content Published Successfully</h2><p>Hello <strong>{{display_name}}</strong>,</p><p>Great news! Your {{content_type}} <strong>"{{content_title}}"</strong> has passed compliance review and is now live on Code+ Academy.</p><p><a href="{{content_url}}" style="background: #10b981; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">View Published Content</a></p><p>Best regards,<br/>Code+ Academy Creator Studio</p></div>',
+    available_placeholders: ['display_name', 'content_type', 'content_title', 'content_url'],
   },
 
   // Careers & Hiring
