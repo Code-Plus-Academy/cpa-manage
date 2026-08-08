@@ -47,6 +47,11 @@ async function cacheDel(...keys) {
       console.log(`[Redis] Invalidated cache keys in ioredis: ${keys.join(', ')}`);
       return;
     }
+  } catch (e) {
+    console.error('[Redis cacheDel Error]:', e.message);
+  }
+}
+
 async function cacheSet(key, value, ttl = 86400) {
   try {
     const upstash = getUpstashRedis();

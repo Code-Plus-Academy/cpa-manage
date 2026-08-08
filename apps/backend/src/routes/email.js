@@ -244,13 +244,30 @@ router.post('/templates/:key/publish', requirePermission('email.templates.edit')
 
     const nextVersion = (existing.version || 1) + 1;
 
-    // Archive snapshot in email_template_versions
-    await client.query(
-      `INSERT INTO email_template_versions (template_key, version, subject_template, body_html_template, published_by)
-       VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (template_key, version) DO NOTHING`,
-      [key, existing.version, existing.subject_template, existing.body_html_template, req.adminUser.id]
-    );
+    // Self-healing email_template_versions snapshot archive
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS email_template_versions (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          template_key TEXT NOT NULL,
+          version INT NOT NULL,
+          subject_template TEXT,
+          body_html_template TEXT,
+          published_by UUID,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE(template_key, version)
+        );
+      `);
+
+      await client.query(
+        `INSERT INTO email_template_versions (template_key, version, subject_template, body_html_template, published_by)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (template_key, version) DO NOTHING`,
+        [key, existing.version || 1, existing.subject_template || liveSubject, existing.body_html_template || liveBody, req.adminUser?.id || null]
+      ).catch((e) => console.warn('[publish] Snapshot row insert warning:', e.message));
+    } catch (verErr) {
+      console.warn('[publish] Snapshot table archive warning (skipped):', verErr.message);
+    }
 
     // Promote draft → live and clear draft columns
     const { rows } = await client.query(
