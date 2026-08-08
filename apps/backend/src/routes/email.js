@@ -106,6 +106,34 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
   }
 });
 
+// Helper to send real-time cache invalidation webhook signal to Main Backend
+const notifyMainBackend = async (key) => {
+  const mainBackendUrl = process.env.MAIN_BACKEND_URL;
+  if (!mainBackendUrl) return;
+  const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
+  try {
+    const targetUrl = new URL('/api/internal/email-template-updated', mainBackendUrl);
+    const payload = JSON.stringify({ key });
+    const isHttps = targetUrl.protocol === 'https:';
+    const clientModule = isHttps ? require('https') : require('http');
+
+    const req = clientModule.request({
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (isHttps ? 443 : 80),
+      path: targetUrl.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
+        'Content-Length': Buffer.byteLength(payload),
+      },
+    });
+    req.on('error', (err) => console.warn('[notifyMainBackend] Signal error:', err.message));
+    req.write(payload);
+    req.end();
+  } catch (e) {}
+};
+
 // PATCH /admin/email/templates/:key (Save Draft / Edit)
 router.patch('/templates/:key', requirePermission('email.templates.edit'), async (req, res, next) => {
   const client = await getClient();
@@ -184,34 +212,6 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
     client.release();
   }
 });
-
-// Helper to send real-time cache invalidation webhook signal to Main Backend
-const notifyMainBackend = async (key) => {
-  const mainBackendUrl = process.env.MAIN_BACKEND_URL;
-  if (!mainBackendUrl) return;
-  const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
-  try {
-    const targetUrl = new URL('/api/internal/email-template-updated', mainBackendUrl);
-    const payload = JSON.stringify({ key });
-    const isHttps = targetUrl.protocol === 'https:';
-    const clientModule = isHttps ? require('https') : require('http');
-
-    const req = clientModule.request({
-      hostname: targetUrl.hostname,
-      port: targetUrl.port || (isHttps ? 443 : 80),
-      path: targetUrl.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
-        'Content-Length': Buffer.byteLength(payload),
-      },
-    });
-    req.on('error', (err) => console.warn('[notifyMainBackend] Signal error:', err.message));
-    req.write(payload);
-    req.end();
-  } catch (e) {}
-};
 
 // POST /admin/email/templates/:key/publish (Copy Draft → Live & Snapshot Version)
 router.post('/templates/:key/publish', requirePermission('email.templates.edit'), async (req, res, next) => {

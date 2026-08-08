@@ -254,8 +254,8 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
       const lSub = r.subject_template && r.subject_template.trim() ? r.subject_template : null;
       const lBody = r.body_html_template && r.body_html_template.trim() ? r.body_html_template : null;
 
-      const effSubject = (useDraft && dSub) ? dSub : (dSub || lSub);
-      const effBody = (useDraft && dBody) ? dBody : (dBody || lBody);
+      const effSubject = (useDraft && dSub) ? dSub : lSub;
+      const effBody = (useDraft && dBody) ? dBody : lBody;
 
       if (effSubject) subjectTpl = effSubject;
       if (effBody) bodyTpl = effBody;
