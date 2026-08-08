@@ -167,6 +167,10 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
 
     await client.query('COMMIT');
 
+    // Invalidate Redis template cache on draft save
+    const { cacheDel } = require('../lib/redis');
+    await cacheDel(`email:template:${key}`).catch(() => {});
+
     res.json({ template: updatedTemplate });
   } catch (err) {
     await client.query('ROLLBACK');
