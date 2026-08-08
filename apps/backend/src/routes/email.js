@@ -36,11 +36,13 @@ router.get('/templates/:key', requirePermission.any(['email.templates.edit', 'em
   }
 });
 
+const { compileAndValidateTemplate } = require('../services/emailTemplateCompiler');
+
 // POST /admin/email/templates
 router.post('/templates', requirePermission('email.templates.edit'), async (req, res, next) => {
   const client = await getClient();
   try {
-    const { key, name, category, subject_template, body_html_template, is_active = true } = req.body;
+    const { key, name, category, subject_template, body_html_template, available_placeholders = [], is_active = true, is_system_locked = false } = req.body;
 
     if (!key || !name || !category || !subject_template || !body_html_template) {
       return next(new AppError('VALIDATION_ERROR', 400, {
@@ -54,8 +56,9 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
       }));
     }
 
-    if (!['transactional', 'security', 'promotional'].includes(category)) {
-      return next(new AppError('VALIDATION_ERROR', 400, null, 'Category must be transactional, security, or promotional.'));
+    const ALLOWED_CATEGORIES = ['transactional', 'security', 'promotional', 'hiring', 'support', 'social'];
+    if (!ALLOWED_CATEGORIES.includes(category)) {
+      return next(new AppError('VALIDATION_ERROR', 400, null, `Category must be one of: ${ALLOWED_CATEGORIES.join(', ')}`));
     }
 
     const { rows: existing } = await query('SELECT id FROM email_templates WHERE key = $1', [key.trim()]);
@@ -63,13 +66,20 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
       return next(new AppError('CONFLICT', 409, null, 'An email template with this key already exists.'));
     }
 
+    // Compile-time pre-validation on save
+    try {
+      compileAndValidateTemplate({ subject_template, body_html_template, available_placeholders });
+    } catch (valErr) {
+      return next(new AppError('VALIDATION_ERROR', 400, null, valErr.message));
+    }
+
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, is_active, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [key.trim(), name.trim(), category, subject_template, body_html_template, is_active, req.adminUser.id]
+      [key.trim(), name.trim(), category, subject_template, body_html_template, JSON.stringify(available_placeholders), !!is_system_locked, is_active, req.adminUser.id]
     );
 
     const newTemplate = rows[0];
@@ -96,16 +106,34 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
   }
 });
 
-// PATCH /admin/email/templates/:key
+// PATCH /admin/email/templates/:key (Save Draft / Edit)
 router.patch('/templates/:key', requirePermission('email.templates.edit'), async (req, res, next) => {
   const client = await getClient();
   try {
     const { key } = req.params;
-    const { name, category, subject_template, body_html_template, is_active } = req.body;
+    const { name, category, subject_template, body_html_template, available_placeholders, is_active } = req.body;
 
-    const { rows: existing } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
-    if (existing.length === 0) {
+    const { rows: existingRows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
+    if (existingRows.length === 0) {
       return next(new AppError('NOT_FOUND', 404, null, 'Email template not found.'));
+    }
+
+    const existing = existingRows[0];
+
+    // Enforce system lock
+    if (existing.is_system_locked && !req.adminUser.is_root) {
+      return next(new AppError('FORBIDDEN', 403, null, 'Template is system-locked and can only be modified by Superadmin.'));
+    }
+
+    const nextSubject = subject_template !== undefined ? subject_template : (existing.draft_subject_template || existing.subject_template);
+    const nextBody = body_html_template !== undefined ? body_html_template : (existing.draft_body_html_template || existing.body_html_template);
+    const nextPlaceholders = available_placeholders !== undefined ? available_placeholders : (existing.available_placeholders || []);
+
+    // Compile-time validation
+    try {
+      compileAndValidateTemplate({ subject_template: nextSubject, body_html_template: nextBody, available_placeholders: nextPlaceholders });
+    } catch (valErr) {
+      return next(new AppError('VALIDATION_ERROR', 400, null, valErr.message));
     }
 
     await client.query('BEGIN');
@@ -114,13 +142,14 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
       `UPDATE email_templates
        SET name = COALESCE($1, name),
            category = COALESCE($2, category),
-           subject_template = COALESCE($3, subject_template),
-           body_html_template = COALESCE($4, body_html_template),
-           is_active = COALESCE($5, is_active),
-           version = version + 1
-       WHERE key = $6
+           draft_subject_template = $3,
+           draft_body_html_template = $4,
+           available_placeholders = COALESCE($5, available_placeholders),
+           is_active = COALESCE($6, is_active),
+           updated_at = NOW()
+       WHERE key = $7
        RETURNING *`,
-      [name, category, subject_template, body_html_template, is_active, key]
+      [name, category, nextSubject, nextBody, JSON.stringify(nextPlaceholders), is_active, key]
     );
 
     const updatedTemplate = rows[0];
@@ -130,15 +159,130 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
       actorIsRoot: req.adminUser.is_root,
       permissionUsed: 'email.templates.edit',
       module: 'email',
-      action: 'email.template_update',
+      action: 'email.template_draft_save',
       targetType: 'email_template',
       targetId: key,
-      reason: `Updated email template ${key}`,
+      reason: `Saved draft for email template ${key}`,
     });
 
     await client.query('COMMIT');
 
     res.json({ template: updatedTemplate });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// POST /admin/email/templates/:key/publish (Copy Draft → Live & Snapshot Version)
+router.post('/templates/:key/publish', requirePermission('email.templates.edit'), async (req, res, next) => {
+  const client = await getClient();
+  try {
+    const { key } = req.params;
+
+    const { rows: existingRows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
+    if (existingRows.length === 0) {
+      return next(new AppError('NOT_FOUND', 404, null, 'Email template not found.'));
+    }
+
+    const existing = existingRows[0];
+
+    if (existing.is_system_locked && !req.adminUser.is_root) {
+      return next(new AppError('FORBIDDEN', 403, null, 'Template is system-locked and can only be published by Superadmin.'));
+    }
+
+    const liveSubject = existing.draft_subject_template || existing.subject_template;
+    const liveBody = existing.draft_body_html_template || existing.body_html_template;
+
+    // Validate before publish
+    compileAndValidateTemplate({
+      subject_template: liveSubject,
+      body_html_template: liveBody,
+      available_placeholders: existing.available_placeholders || [],
+    });
+
+    await client.query('BEGIN');
+
+    const nextVersion = (existing.version || 1) + 1;
+
+    // Archive snapshot in email_template_versions
+    await client.query(
+      `INSERT INTO email_template_versions (template_key, version, subject_template, body_html_template, published_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (template_key, version) DO NOTHING`,
+      [key, existing.version, existing.subject_template, existing.body_html_template, req.adminUser.id]
+    );
+
+    // Promote draft → live
+    const { rows } = await client.query(
+      `UPDATE email_templates
+       SET subject_template = $1,
+           body_html_template = $2,
+           version = $3,
+           updated_at = NOW()
+       WHERE key = $4
+       RETURNING *`,
+      [liveSubject, liveBody, nextVersion, key]
+    );
+
+    const publishedTemplate = rows[0];
+
+    await writeAuditLog(client, {
+      actorAdminId: req.adminUser.id,
+      actorIsRoot: req.adminUser.is_root,
+      permissionUsed: 'email.templates.edit',
+      module: 'email',
+      action: 'email.template_publish',
+      targetType: 'email_template',
+      targetId: key,
+      reason: `Published version ${nextVersion} for email template ${key}`,
+    });
+
+    await client.query('COMMIT');
+
+    res.json({ template: publishedTemplate, message: `Template ${key} published successfully as v${nextVersion}.` });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// DELETE /admin/email/templates/:key
+router.delete('/templates/:key', requirePermission('email.templates.edit'), async (req, res, next) => {
+  const client = await getClient();
+  try {
+    const { key } = req.params;
+
+    const { rows: existingRows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
+    if (existingRows.length === 0) {
+      return next(new AppError('NOT_FOUND', 404, null, 'Email template not found.'));
+    }
+
+    const existing = existingRows[0];
+    if (existing.is_system_locked && !req.adminUser.is_root) {
+      return next(new AppError('FORBIDDEN', 403, null, 'Template is system-locked and cannot be deleted.'));
+    }
+
+    await client.query('BEGIN');
+    await client.query('DELETE FROM email_templates WHERE key = $1', [key]);
+
+    await writeAuditLog(client, {
+      actorAdminId: req.adminUser.id,
+      actorIsRoot: req.adminUser.is_root,
+      permissionUsed: 'email.templates.edit',
+      module: 'email',
+      action: 'email.template_delete',
+      targetType: 'email_template',
+      targetId: key,
+      reason: `Deleted email template ${key}`,
+    });
+
+    await client.query('COMMIT');
+    res.json({ message: `Template ${key} deleted successfully.` });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);
