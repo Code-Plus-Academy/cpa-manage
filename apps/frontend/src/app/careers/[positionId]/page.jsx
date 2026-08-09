@@ -205,7 +205,8 @@ export default function PositionDetailPage() {
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
                   {position.department || 'Engineering'}
-                </span                {(() => {
+                </span>
+                {(() => {
                   const st = (position.status || 'open').toLowerCase().trim();
                   if (st === 'open') {
                     return (
@@ -317,7 +318,6 @@ export default function PositionDetailPage() {
                   </div>
                 );
               })()}
-            </div>)}
             </div>
           </div>
         </div>
