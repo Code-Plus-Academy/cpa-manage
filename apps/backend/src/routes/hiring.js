@@ -32,9 +32,9 @@ router.get('/positions', async (req, res, next) => {
     let idx = 1;
 
     if (status === 'public') {
-      conditions.push(`status != 'draft'`);
+      conditions.push(`LOWER(status) != 'draft'`);
     } else if (status) {
-      conditions.push(`status = $${idx++}`);
+      conditions.push(`LOWER(status) = LOWER($${idx++})`);
       values.push(status);
     }
     if (department) {

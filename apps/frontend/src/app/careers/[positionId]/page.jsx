@@ -205,24 +205,28 @@ export default function PositionDetailPage() {
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
                 <span style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
                   {position.department || 'Engineering'}
-                </span>
-                {position.status === 'open' && (
-                  <span style={{ fontSize: '12px', color: '#34d399', fontWeight: '700', background: 'rgba(16, 185, 129, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                    ✨ Active Hiring
-                  </span>
-                )}
-
-                {position.status === 'upcoming' && (
-                  <span style={{ fontSize: '12px', color: '#c084fc', fontWeight: '700', background: 'rgba(192, 132, 252, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(192, 132, 252, 0.3)' }}>
-                    🔮 Upcoming Position (Opening Soon)
-                  </span>
-                )}
-
-                {position.status === 'closed' && (
-                  <span style={{ fontSize: '12px', color: '#f87171', fontWeight: '700', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
-                    🔒 Position Closed / Archived
-                  </span>
-                )}
+                </span                {(() => {
+                  const st = (position.status || 'open').toLowerCase().trim();
+                  if (st === 'open') {
+                    return (
+                      <span style={{ fontSize: '12px', color: '#34d399', fontWeight: '700', background: 'rgba(16, 185, 129, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                        ✨ Active Hiring
+                      </span>
+                    );
+                  }
+                  if (st === 'upcoming') {
+                    return (
+                      <span style={{ fontSize: '12px', color: '#c084fc', fontWeight: '700', background: 'rgba(192, 132, 252, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(192, 132, 252, 0.3)' }}>
+                        🔮 Upcoming Position (Opening Soon)
+                      </span>
+                    );
+                  }
+                  return (
+                    <span style={{ fontSize: '12px', color: '#f87171', fontWeight: '700', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 12px', borderRadius: '9999px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>
+                      🔒 Position Closed / Archived
+                    </span>
+                  );
+                })()}
               </div>
 
               <h1 style={{ fontSize: '32px', fontWeight: '900', color: '#ffffff', margin: '0 0 12px 0', lineHeight: 1.2 }}>
@@ -251,59 +255,69 @@ export default function PositionDetailPage() {
 
             {/* Apply Action CTA */}
             <div>
-              {position.status === 'open' ? (
-                <>
-                  <button
-                    onClick={handleApplyClick}
-                    style={{
-                      padding: '14px 28px', borderRadius: '12px',
-                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                      color: '#ffffff', fontSize: '15px', fontWeight: '800', border: 'none', cursor: 'pointer',
-                      boxShadow: '0 6px 20px rgba(16, 185, 129, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '8px'
-                    }}
-                  >
-                    {isAuthenticated ? <Send size={18} /> : <Lock size={18} />}
-                    {isAuthenticated ? 'Apply for this Position' : 'Sign In & Apply for Position'}
-                  </button>
-                  <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '6px', textAlign: 'center' }}>
-                    {isAuthenticated ? '✓ Logged In & Ready' : '🔒 Login Required to Submit'}
+              {(() => {
+                const st = (position.status || 'open').toLowerCase().trim();
+                if (st === 'open') {
+                  return (
+                    <>
+                      <button
+                        onClick={handleApplyClick}
+                        style={{
+                          padding: '14px 28px', borderRadius: '12px',
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          color: '#ffffff', fontSize: '15px', fontWeight: '800', border: 'none', cursor: 'pointer',
+                          boxShadow: '0 6px 20px rgba(16, 185, 129, 0.4)', display: 'inline-flex', alignItems: 'center', gap: '8px'
+                        }}
+                      >
+                        {isAuthenticated ? <Send size={18} /> : <Lock size={18} />}
+                        {isAuthenticated ? 'Apply for this Position' : 'Sign In & Apply for Position'}
+                      </button>
+                      <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '6px', textAlign: 'center' }}>
+                        {isAuthenticated ? '✓ Logged In & Ready' : '🔒 Login Required to Submit'}
+                      </div>
+                    </>
+                  );
+                }
+                if (st === 'upcoming') {
+                  return (
+                    <div style={{ textAlign: 'center' }}>
+                      <button
+                        disabled
+                        style={{
+                          padding: '14px 28px', borderRadius: '12px',
+                          background: 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)',
+                          color: '#ffffff', fontSize: '14px', fontWeight: '700', border: 'none', cursor: 'not-allowed',
+                          opacity: 0.85, display: 'inline-flex', alignItems: 'center', gap: '8px'
+                        }}
+                      >
+                        <Clock size={18} /> Applications Opening Soon
+                      </button>
+                      <div style={{ fontSize: '11px', color: '#c084fc', marginTop: '6px' }}>
+                        🔮 Upcoming Position Specs Viewable
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ textAlign: 'center' }}>
+                    <button
+                      disabled
+                      style={{
+                        padding: '14px 28px', borderRadius: '12px',
+                        background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)',
+                        color: '#9ca3af', fontSize: '14px', fontWeight: '700', cursor: 'not-allowed',
+                        display: 'inline-flex', alignItems: 'center', gap: '8px'
+                      }}
+                    >
+                      <Lock size={18} /> Applications Closed
+                    </button>
+                    <div style={{ fontSize: '11px', color: '#f87171', marginTop: '6px' }}>
+                      🔒 Position Archived
+                    </div>
                   </div>
-                </>
-              ) : position.status === 'upcoming' ? (
-                <div style={{ textAlign: 'center' }}>
-                  <button
-                    disabled
-                    style={{
-                      padding: '14px 28px', borderRadius: '12px',
-                      background: 'linear-gradient(135deg, #a855f7 0%, #7e22ce 100%)',
-                      color: '#ffffff', fontSize: '14px', fontWeight: '700', border: 'none', cursor: 'not-allowed',
-                      opacity: 0.85, display: 'inline-flex', alignItems: 'center', gap: '8px'
-                    }}
-                  >
-                    <Clock size={18} /> Applications Opening Soon
-                  </button>
-                  <div style={{ fontSize: '11px', color: '#c084fc', marginTop: '6px' }}>
-                    🔮 Upcoming Position Specs Viewable
-                  </div>
-                </div>
-              ) : (
-                <div style={{ textAlign: 'center' }}>
-                  <button
-                    disabled
-                    style={{
-                      padding: '14px 28px', borderRadius: '12px',
-                      background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)',
-                      color: '#9ca3af', fontSize: '14px', fontWeight: '700', cursor: 'not-allowed',
-                      display: 'inline-flex', alignItems: 'center', gap: '8px'
-                    }}
-                  >
-                    <Lock size={18} /> Applications Closed
-                  </button>
-                  <div style={{ fontSize: '11px', color: '#f87171', marginTop: '6px' }}>
-                    🔒 Position Archived
-                  </div>
-                </div>
-              )}
+                );
+              })()}
+            </div>)}
             </div>
           </div>
         </div>

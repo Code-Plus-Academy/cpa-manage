@@ -23,11 +23,14 @@ export default function PublicCareersPage() {
   const fetchOpenPositions = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiUrl}/admin/hiring/positions?status=public`);
+      const res = await fetch(`${apiUrl}/admin/hiring/positions`);
       if (res.ok) {
         const data = await res.json();
-        // Keep open, upcoming, and closed positions (hide draft)
-        const visiblePositions = (data.positions || []).filter(p => p.status !== 'draft');
+        // Keep open, upcoming, and closed positions (only hide draft)
+        const visiblePositions = (data.positions || []).filter(p => {
+          const st = (p.status || '').toLowerCase().trim();
+          return st !== 'draft';
+        });
         setPositions(visiblePositions);
       }
     } catch (err) {
@@ -45,8 +48,9 @@ export default function PublicCareersPage() {
       (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (p.department && p.department.toLowerCase().includes(searchQuery.toLowerCase()));
     
+    const pStatus = (p.status || 'open').toLowerCase().trim();
     const matchesDept = selectedDept === 'ALL' || p.department === selectedDept;
-    const matchesStatus = selectedStatusFilter === 'ALL' || p.status === selectedStatusFilter;
+    const matchesStatus = selectedStatusFilter === 'ALL' || pStatus === selectedStatusFilter.toLowerCase();
     return matchesSearch && matchesDept && matchesStatus;
   });
 
@@ -160,9 +164,10 @@ export default function PublicCareersPage() {
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
             {filteredPositions.map(p => {
-              const isOpen = p.status === 'open';
-              const isUpcoming = p.status === 'upcoming';
-              const isClosed = p.status === 'closed';
+              const st = (p.status || 'open').toLowerCase().trim();
+              const isOpen = st === 'open';
+              const isUpcoming = st === 'upcoming';
+              const isClosed = st === 'closed' || st === 'archived';
 
               return (
                 <div
