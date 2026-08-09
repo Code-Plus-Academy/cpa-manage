@@ -1,4 +1,5 @@
 const { query } = require('../config/db');
+const { sendTemplatedEmail } = require('./emailTemplateCompiler');
 
 const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL || 'https://certification-bacnkend.onrender.com';
 const PDF_SERVICE_API_KEY = process.env.PDF_SERVICE_API_KEY || 'cpa_sk_89f2a71e4b9d0831';
@@ -173,6 +174,54 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
         [generatedPdfUrl, applicationId, docType]
       );
       console.log(`[DocumentTrigger] Successfully generated PDF for app ${applicationId} (${docType}): ${generatedPdfUrl}`);
+
+      // Dispatch dynamic email using configured templates to candidate & admin
+      try {
+        const templateKey = isCertificate ? 'hiring_certificate' : 'hiring_offer_letter';
+        const candidateEmail = app.candidate_email;
+        const adminEmail = docDetails.admin_email || process.env.ADMIN_NOTIFY_EMAIL || 'admin@codeplusacademy.in';
+        const serialNo = docDetails.serial_number || `${(isCertificate ? 'CERT' : 'OFFER')}-${new Date().getFullYear()}-000001`;
+
+        const emailPayload = {
+          name: app.candidate_name,
+          position: docDetails.offer_title || docDetails.role || app.position_title,
+          department: docDetails.organization_name || 'Code Plus Academy',
+          startdate: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+          salary: docDetails.compensation || 'Standard Rate',
+          offer_deadline: docDetails.deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+          offer_pdf_link: generatedPdfUrl,
+          certificate_pdf_link: generatedPdfUrl,
+          pdf_url: generatedPdfUrl,
+          serial_no: serialNo,
+          date: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+          ...docDetails
+        };
+
+        // 1. Dispatch email to Candidate
+        if (candidateEmail) {
+          console.log(`[DocumentTrigger] Dispatching '${templateKey}' email to candidate (${candidateEmail}) with document URL...`);
+          await sendTemplatedEmail({
+            templateKey,
+            recipientEmail: candidateEmail,
+            payload: emailPayload
+          }).catch(err => console.error(`[DocumentTrigger] Failed sending candidate email: ${err.message}`));
+        }
+
+        // 2. Dispatch notification email to Admin (approver)
+        if (adminEmail && adminEmail !== candidateEmail) {
+          console.log(`[DocumentTrigger] Dispatching '${templateKey}' copy notification to admin (${adminEmail})...`);
+          await sendTemplatedEmail({
+            templateKey,
+            recipientEmail: adminEmail,
+            payload: {
+              ...emailPayload,
+              name: `Admin (${docDetails.admin_name || 'Approver'}) — Issued for ${app.candidate_name}`
+            }
+          }).catch(err => console.error(`[DocumentTrigger] Failed sending admin notification email: ${err.message}`));
+        }
+      } catch (emailErr) {
+        console.error(`[DocumentTrigger] Error preparing document email dispatch: ${emailErr.message}`);
+      }
     }
 
     return {

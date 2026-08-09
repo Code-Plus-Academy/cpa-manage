@@ -590,6 +590,8 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
       signatory: formFields.signatory || 'Dr. Alex Vance',
       signatory_role: formFields.signatory_role || 'Director of Engineering',
       signature_text: formFields.signature_text || 'Dr. Alex Vance',
+      admin_email: req.adminUser?.email || req.admin?.email,
+      admin_name: req.adminUser?.display_name || req.admin?.display_name,
       ...formFields
     });
 
@@ -793,6 +795,8 @@ router.post('/applications/:id/issue-certificate-confirm', async (req, res, next
       signatory: formFields.signatory,
       signatory_role: formFields.signatory_role,
       signature_text: formFields.signature_text,
+      admin_email: req.adminUser?.email || req.admin?.email,
+      admin_name: req.adminUser?.display_name || req.admin?.display_name,
       ...formFields
     });
 
