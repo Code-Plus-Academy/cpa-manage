@@ -23,7 +23,10 @@ export default function PublicCareersPage() {
   const fetchOpenPositions = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiUrl}/admin/hiring/positions`);
+      let res = await fetch(`${apiUrl}/api/hiring/positions`);
+      if (!res.ok) {
+        res = await fetch(`${apiUrl}/admin/hiring/positions`);
+      }
       if (res.ok) {
         const data = await res.json();
         // Keep open, upcoming, and closed positions (only hide draft)

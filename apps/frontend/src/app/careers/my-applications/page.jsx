@@ -31,7 +31,10 @@ export default function CandidateApplicationsPage() {
     try {
       setLoading(true);
       setSearched(true);
-      const res = await fetch(`${apiUrl}/admin/hiring/my-applications?email=${encodeURIComponent(emailToSearch.trim())}`);
+      let res = await fetch(`${apiUrl}/api/hiring/my-applications?email=${encodeURIComponent(emailToSearch.trim())}`);
+      if (!res.ok) {
+        res = await fetch(`${apiUrl}/admin/hiring/my-applications?email=${encodeURIComponent(emailToSearch.trim())}`);
+      }
       if (res.ok) {
         const data = await res.json();
         setApplications(data.applications || []);

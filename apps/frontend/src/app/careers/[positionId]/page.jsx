@@ -72,7 +72,10 @@ export default function PositionDetailPage() {
   const fetchPositionDetails = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiUrl}/admin/hiring/positions/${positionId}`);
+      let res = await fetch(`${apiUrl}/api/hiring/positions/${positionId}`);
+      if (!res.ok) {
+        res = await fetch(`${apiUrl}/admin/hiring/positions/${positionId}`);
+      }
       if (res.ok) {
         const data = await res.json();
         setPosition(data.position);
@@ -133,7 +136,7 @@ export default function PositionDetailPage() {
 
     try {
       setSubmittingApp(true);
-      const res = await fetch(`${apiUrl}/admin/hiring/applications/apply`, {
+      let res = await fetch(`${apiUrl}/api/hiring/applications/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,6 +144,16 @@ export default function PositionDetailPage() {
           ...applicantForm
         }),
       });
+      if (!res.ok) {
+        res = await fetch(`${apiUrl}/admin/hiring/applications/apply`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            position_id: positionId,
+            ...applicantForm
+          }),
+        });
+      }
 
       const data = await res.json();
 

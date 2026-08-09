@@ -57,6 +57,7 @@ app.use(cookieParser());
 // ─── Public routes ─────────────────────────────────────────────────────────────
 app.use('/healthz', healthzRoutes);
 app.use('/webhook', webhookRoutes);
+app.use('/api/hiring', hiringRoutes);
 
 // ─── Auth routes (login/logout BEFORE requireAdminAuth) ────────────────────────
 app.use('/admin/auth', authRoutes);
