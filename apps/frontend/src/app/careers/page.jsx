@@ -123,10 +123,10 @@ export default function PublicCareersPage() {
           {/* Status Filter Bar */}
           <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
             {[
-              { id: 'ALL', label: 'All Positions' },
-              { id: 'open', label: '✨ Active Hiring' },
-              { id: 'upcoming', label: '🔮 Upcoming Roles' },
-              { id: 'closed', label: '🔒 Closed / Archived' },
+              { id: 'ALL', label: `All Positions (${positions.length})` },
+              { id: 'open', label: `✨ Active Hiring (${positions.filter(p => (p.status || '').toLowerCase().trim() === 'open').length})` },
+              { id: 'upcoming', label: `🔮 Upcoming Roles (${positions.filter(p => (p.status || '').toLowerCase().trim() === 'upcoming').length})` },
+              { id: 'closed', label: `🔒 Closed / Archived (${positions.filter(p => ['closed', 'archived'].includes((p.status || '').toLowerCase().trim())).length})` },
             ].map(st => (
               <button
                 key={st.id}
