@@ -23,10 +23,15 @@ const DEFAULT_TEMPLATES = {
     html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #6366f1;">Welcome to Code+ Academy</h2><p>Hello <strong>{{display_name}}</strong>,</p><p>Thank you for signing up. Your 6-digit email verification code is:</p><div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">{{otp_code}}</div><p style="font-size: 12px; color: #64748b;">This OTP code will expire in {{expiry_minutes}} minutes.</p><p>Best regards,<br/>Code+ Academy Team</p></div>',
     available_placeholders: ['display_name', 'otp_code', 'expiry_minutes'],
   },
+  password_reset_otp: {
+    subject: '[Code+ Academy] Password Reset Code: {{otp_code}}',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #4f46e5;">Password Reset Verification Code</h2><p>Hello <strong>{{name}}</strong>,</p><p>You requested to reset your password. Use your 6-digit verification code below to proceed:</p><div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">{{otp_code}}</div><p style="font-size: 12px; color: #64748b;">This OTP code will expire in {{expiry_minutes}} minutes.</p><p>If you did not request this, please ignore this email.</p></div>',
+    available_placeholders: ['name', 'otp_code', 'expiry_minutes'],
+  },
   password_reset: {
-    subject: '[Code+ Academy] Reset Your Account Password - OTP: {{otp_code}}',
-    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #4f46e5;">Password Reset Request</h2><p>Hello <strong>{{name}}</strong>,</p><p>We received a request to reset your password. You can use your 6-digit verification code below:</p><div style="background: #1e1b4b; color: #818cf8; font-size: 24px; font-weight: bold; letter-spacing: 4px; padding: 14px 20px; border-radius: 8px; display: inline-block; margin: 12px 0;">{{otp_code}}</div><p>Or click the button below to reset your password via secure direct link:</p><p><a href="{{{reset_url}}}" style="background: #4f46e5; color: #fff; padding: 12px 22px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password Now</a></p><p style="font-size: 12px; color: #64748b; margin-top: 20px;">If you did not request a password reset, please ignore this email.</p></div>',
-    available_placeholders: ['name', 'otp_code', 'reset_url'],
+    subject: '[Code+ Academy] Reset Your Account Password',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #4f46e5;">Password Reset Request</h2><p>Hello <strong>{{name}}</strong>,</p><p>We received a request to reset your password. Click the link below to set a new password:</p><p><a href="{{{reset_url}}}" style="background: #4f46e5; color: #fff; padding: 12px 22px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Reset Password Now</a></p><p style="font-size: 12px; color: #64748b; margin-top: 20px;">If you did not request this, please ignore this email.</p></div>',
+    available_placeholders: ['name', 'reset_url'],
   },
   content_published_confirmation: {
     subject: '🎉 Your {{content_type}} "{{content_title}}" is Now Live!',
@@ -167,7 +172,7 @@ function validatePayloadSchema(payload, requiredPlaceholders = []) {
   return missing;
 }
 
-const CRITICAL_TEMPLATE_KEYS = new Set(['admin_registration_otp', 'password_reset', '2fa_login_alert']);
+const CRITICAL_TEMPLATE_KEYS = new Set(['admin_registration_otp', 'password_reset', 'password_reset_otp', '2fa_login_alert']);
 
 const MOCK_SAMPLE_PAYLOADS = {
   content_published_confirmation: {
@@ -186,9 +191,13 @@ const MOCK_SAMPLE_PAYLOADS = {
     otp_code: '582910',
     expiry_minutes: '15',
   },
-  password_reset: {
+  password_reset_otp: {
     name: 'Developer',
     otp_code: '492815',
+    expiry_minutes: '15',
+  },
+  password_reset: {
+    name: 'Developer',
     reset_url: 'https://codeplusacademy.in/reset-password?token=sample_test_token',
   },
   hiring_offer_letter: {

@@ -29,15 +29,13 @@ setInterval(runCampaignSender, 60 * 1000);     // Every 1 minute
 setInterval(runStrikeExpiry, 15 * 60 * 1000);   // Every 15 minutes
 setInterval(runDigestSender, 60 * 60 * 1000);   // Every 1 hour
 
-// Auto-run DB Migrations & Seed Default Templates on Startup
+// Auto-run DB Migrations on Startup
 const { runMigrations } = require('./db/runMigrations');
-const { seedDefaultTemplates } = require('./scripts/seedDefaultTemplates');
 
 (async () => {
   try {
     await runMigrations();
-    await seedDefaultTemplates();
-    logger.info('[DB] Migrations and default email templates auto-initialized successfully');
+    logger.info('[DB] Migrations auto-initialized successfully');
   } catch (err) {
     logger.error(`[DB Init Error] ${err.message}`);
   }

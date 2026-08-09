@@ -22,6 +22,8 @@ const OPTIONAL_VARS = {
   EMAIL_FROM_ADDRESS: 'notifications@codeplusacademy.in',
   MANAGE_SERVICE_KEY: '',
   WEBHOOK_SERVICE_KEY: '',
+  PDF_SERVICE_URL: 'https://certification-bacnkend.onrender.com',
+  PDF_SERVICE_API_KEY: 'cpa_sk_89f2a71e4b9d0831',
 };
 
 const missing = REQUIRED_VARS.filter(key => !process.env[key]);

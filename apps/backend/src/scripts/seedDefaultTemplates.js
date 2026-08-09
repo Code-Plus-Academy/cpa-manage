@@ -43,12 +43,7 @@ async function seedDefaultTemplates() {
          (key, name, category, subject_template, body_html_template, available_placeholders, version, is_active, is_system_locked, updated_at)
        VALUES 
          ($1, $2, $3, $4, $5, $6, 1, true, $7, NOW())
-       ON CONFLICT (key) DO UPDATE
-       SET subject_template = EXCLUDED.subject_template,
-           body_html_template = EXCLUDED.body_html_template,
-           available_placeholders = EXCLUDED.available_placeholders,
-           is_system_locked = EXCLUDED.is_system_locked,
-           updated_at = NOW()
+       ON CONFLICT (key) DO NOTHING
        RETURNING key`,
       [
         key,

@@ -7,7 +7,7 @@ import AdminShell from '../../../components/shell/AdminShell';
 import { apiFetch } from '../../../lib/apiClient';
 import {
   ArrowLeft, MessageSquare, Send, CheckCircle2, Clock, XCircle, AlertCircle,
-  FileText, Sparkles, User, ShieldCheck, Plus, Check
+  FileText, Sparkles, User, ShieldCheck, Plus, Check, Award
 } from 'lucide-react';
 
 export default function ApplicationDetailAdminPage() {
@@ -33,6 +33,21 @@ export default function ApplicationDetailAdminPage() {
   const [offerPreviewHtml, setOfferPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [approving, setApproving] = useState(false);
+
+  // Certificate Generation Preview Modal
+  const [showCertModal, setShowCertModal] = useState(false);
+  const [certForm, setCertForm] = useState({
+    role_title: '',
+    duration: '6 Months',
+    organization_name: 'Code Plus Academy',
+    signatory: 'Dr. Alex Vance',
+    signatory_role: 'Director of Engineering',
+    signature_text: 'Dr. Alex Vance',
+    template_name: 'certificate.html'
+  });
+  const [certPreviewHtml, setCertPreviewHtml] = useState('');
+  const [certPreviewLoading, setCertPreviewLoading] = useState(false);
+  const [issuingCert, setIssuingCert] = useState(false);
 
   const messagesEndRef = useRef(null);
 
@@ -200,6 +215,45 @@ export default function ApplicationDetailAdminPage() {
     }
   };
 
+  const handlePreviewCert = async (e) => {
+    e.preventDefault();
+    try {
+      setCertPreviewLoading(true);
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/issue-certificate-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(certForm),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCertPreviewHtml(data.preview_html);
+      }
+    } catch (err) {
+      console.error('Failed certificate preview:', err);
+    } finally {
+      setCertPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmIssueCert = async () => {
+    try {
+      setIssuingCert(true);
+      const res = await apiFetch(`/admin/hiring/applications/${applicationId}/issue-certificate-confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(certForm),
+      });
+      if (res.ok) {
+        setShowCertModal(false);
+        fetchDetail();
+      }
+    } catch (err) {
+      console.error('Failed certificate confirmation:', err);
+    } finally {
+      setIssuingCert(false);
+    }
+  };
+
   if (loading) {
     return (
       <AdminShell activeTab="hiring">
@@ -229,6 +283,28 @@ export default function ApplicationDetailAdminPage() {
             <span style={{ padding: '6px 14px', borderRadius: '9999px', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
               {application?.status}
             </span>
+
+            <button
+              onClick={() => {
+                setCertForm({
+                  role_title: application?.position_title || '',
+                  duration: '6 Months',
+                  organization_name: 'Code Plus Academy',
+                  signatory: 'Dr. Alex Vance',
+                  signatory_role: 'Director of Engineering',
+                  signature_text: 'Dr. Alex Vance',
+                  template_name: 'certificate.html'
+                });
+                setShowCertModal(true);
+              }}
+              style={{
+                padding: '10px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                display: 'inline-flex', alignItems: 'center', gap: '6px'
+              }}
+            >
+              <Award size={16} /> Issue &amp; Send Certificate
+            </button>
 
             {application?.status !== 'approved' && (
               <button
@@ -424,6 +500,81 @@ export default function ApplicationDetailAdminPage() {
                   }}
                 >
                   {approving ? 'Dispatching Offer...' : 'Confirm & Dispatch Offer Letter'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Certificate Generation Modal with Live HTML Preview */}
+        {showCertModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '720px', maxHeight: '90vh', overflowY: 'auto' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '16px', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Award style={{ color: '#818cf8' }} size={22} /> Issue &amp; Generate Certificate of Completion
+              </h2>
+
+              <form onSubmit={handlePreviewCert} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Certificate Role / Title</label>
+                    <input type="text" value={certForm.role_title} onChange={(e) => setCertForm({ ...certForm, role_title: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Program Duration</label>
+                    <input type="text" placeholder="e.g. 6 Months / 120 Hours" value={certForm.duration} onChange={(e) => setCertForm({ ...certForm, duration: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Organization Name</label>
+                    <input type="text" value={certForm.organization_name} onChange={(e) => setCertForm({ ...certForm, organization_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Template Filename</label>
+                    <input type="text" value={certForm.template_name} onChange={(e) => setCertForm({ ...certForm, template_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Signatory Name</label>
+                    <input type="text" value={certForm.signatory} onChange={(e) => setCertForm({ ...certForm, signatory: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Signatory Role</label>
+                    <input type="text" value={certForm.signatory_role} onChange={(e) => setCertForm({ ...certForm, signatory_role: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Cursive Signature Text</label>
+                    <input type="text" value={certForm.signature_text} onChange={(e) => setCertForm({ ...certForm, signature_text: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                </div>
+
+                <button type="submit" style={{ padding: '10px', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
+                  {certPreviewLoading ? 'Generating Preview...' : 'Preview Certificate HTML'}
+                </button>
+              </form>
+
+              {certPreviewHtml && (
+                <div style={{ background: '#ffffff', color: '#000000', padding: '16px', borderRadius: '8px', marginBottom: '20px', maxHeight: '280px', overflowY: 'auto' }}>
+                  <div dangerouslySetInnerHTML={{ __html: certPreviewHtml }} />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button onClick={() => setShowCertModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmIssueCert}
+                  disabled={issuingCert || !certPreviewHtml}
+                  style={{
+                    flex: 1, padding: '10px', borderRadius: '6px', border: 'none',
+                    background: issuingCert ? '#9ca3af' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', fontWeight: '700', cursor: 'pointer'
+                  }}
+                >
+                  {issuingCert ? 'Generating & Dispatching Certificate...' : 'Confirm & Issue Certificate'}
                 </button>
               </div>
             </div>

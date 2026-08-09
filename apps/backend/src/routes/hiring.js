@@ -586,6 +586,120 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
   }
 });
 
+// POST /applications/:id/issue-certificate-preview — Render HTML certificate preview
+router.post('/applications/:id/issue-certificate-preview', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name } = req.body;
+
+    const appRes = await query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       JOIN hiring_positions p ON a.position_id = p.id
+       WHERE a.id = $1`,
+      [id]
+    );
+
+    if (appRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Application not found' } });
+    }
+
+    const app = appRes.rows[0];
+
+    const previewHtml = `
+      <div style="font-family: 'Times New Roman', serif; padding: 40px; text-align: center; border: 4px double #4f46e5; background: #ffffff; color: #111827;">
+        <h1 style="color: #312e81; font-size: 28px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Certificate of Completion</h1>
+        <p style="font-style: italic; color: #4b5563; font-size: 14px; margin-bottom: 20px;">This certificate is proudly presented to</p>
+        <h2 style="color: #4f46e5; font-size: 32px; font-weight: bold; margin: 10px 0; border-bottom: 2px solid #e0e7ff; display: inline-block; padding-bottom: 4px;">${app.candidate_name}</h2>
+        <p style="color: #374151; font-size: 15px; max-width: 500px; margin: 20px auto; line-height: 1.6;">
+          For successfully completing the <strong>${role_title || app.position_title}</strong> internship/program at <strong>${organization_name || 'Code Plus Academy'}</strong> for a duration of <strong>${duration || '6 Months'}</strong>.
+        </p>
+        <div style="margin-top: 40px; display: flex; justify-content: space-around; align-items: flex-end;">
+          <div>
+            <p style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 24px; color: #1e1b4b; margin: 0;">${signature_text || signatory || 'Dr. Alex Vance'}</p>
+            <p style="font-size: 12px; font-weight: bold; border-top: 1px solid #9ca3af; padding-top: 4px; color: #4b5563; margin-top: 4px;">${signatory || 'Dr. Alex Vance'}<br/><span style="font-weight: normal; color: #6b7280;">${signatory_role || 'Director of Engineering'}</span></p>
+          </div>
+          <div>
+            <p style="font-size: 13px; font-weight: bold; color: #4b5563; margin: 0;">Date: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+            <p style="font-size: 11px; color: #9ca3af; margin-top: 4px;">Code Plus Academy Verification System</p>
+          </div>
+        </div>
+      </div>
+    `;
+
+    res.json({ preview_html: previewHtml, candidate_name: app.candidate_name, candidate_email: app.candidate_email });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /applications/:id/issue-certificate-confirm — Issue certificate & dispatch via PDF automation
+router.post('/applications/:id/issue-certificate-confirm', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name } = req.body;
+
+    const appRes = await query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       JOIN hiring_positions p ON a.position_id = p.id
+       WHERE a.id = $1`,
+      [id]
+    );
+
+    if (appRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Application not found' } });
+    }
+
+    const app = appRes.rows[0];
+    const serialNumber = await generateSequentialSerialNumber('CERT');
+    const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
+
+    // Log document in hiring_generated_documents
+    const docRes = await query(
+      `INSERT INTO hiring_generated_documents (
+        application_id, document_type, rendered_html, serial_number, verification_code, document_version, variables_used, sent_to
+       ) VALUES ($1, 'certificate', $2, $3, $4, 1, $5, $6)
+       RETURNING *`,
+      [
+        id,
+        `<div>Certificate HTML for ${app.candidate_name} (${serialNumber})</div>`,
+        serialNumber,
+        verificationCode,
+        JSON.stringify({ role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name }),
+        app.candidate_email || 'candidate@example.com'
+      ]
+    );
+
+    const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id, {
+      document_type: 'certificate',
+      template_name: template_name || 'certificate.html',
+      role: role_title || app.position_title,
+      serial_number: serialNumber,
+      duration,
+      organization_name,
+      signatory,
+      signatory_role,
+      signature_text
+    });
+
+    notificationService.notifyCandidateStatusChange(id, 'certificate_issued');
+
+    res.json({
+      application: app,
+      document: docRes.rows[0],
+      serial_number: serialNumber,
+      verification_code: verificationCode,
+      document_trigger_status: docTriggerStatus,
+      message: `Certificate ${serialNumber} issued and dispatched to ${app.candidate_email}.`
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ─── 5. INTERN TASK MANAGEMENT ────────────────────────────────────────────────
 
 // GET /applications/:id/tasks — Get intern tasks
