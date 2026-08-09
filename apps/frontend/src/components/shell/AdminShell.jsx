@@ -356,8 +356,22 @@ export default function AdminShell({
             ))}
           </div>
 
-          {/* Right Actions: Search + SLA Alert Bell + Profile */}
+          {/* Right Actions: Search + Public Careers Portal + SLA Alert Bell + Profile */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <a
+              href="/careers"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                padding: '6px 12px', borderRadius: '6px',
+                background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)',
+                color: '#818cf8', fontSize: '12px', fontWeight: '600', textDecoration: 'none'
+              }}
+            >
+              <Briefcase size={14} /> Public Careers Portal ↗
+            </a>
+
             {/* Command Palette Search Box */}
             <div style={{ position: 'relative', width: '240px' }}>
               <Search size={14} color={tokens.colors.textMuted} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }} />

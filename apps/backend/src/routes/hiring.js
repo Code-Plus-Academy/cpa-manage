@@ -259,6 +259,67 @@ router.delete('/positions/:id', async (req, res, next) => {
 
 // ─── 2. CANDIDATE & APPLICATION PIPELINE ──────────────────────────────────────
 
+// POST /applications/apply — Submit candidate application for a position
+router.post('/applications/apply', async (req, res, next) => {
+  try {
+    const { position_id, name, email, phone, resume_url, cover_letter, answers } = req.body;
+
+    if (!position_id || !name || !email) {
+      return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'position_id, name, and email are required.' } });
+    }
+
+    // 1. Verify position exists
+    const posRes = await query(`SELECT * FROM hiring_positions WHERE id = $1`, [position_id]);
+    if (posRes.rows.length === 0) {
+      return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Position not found.' } });
+    }
+    const position = posRes.rows[0];
+
+    // 2. Lookup or create candidate
+    let candidateId;
+    const candRes = await query(`SELECT id FROM hiring_candidates WHERE email ILIKE $1`, [email.trim()]);
+    if (candRes.rows.length > 0) {
+      candidateId = candRes.rows[0].id;
+    } else {
+      const newCand = await query(
+        `INSERT INTO hiring_candidates (name, email, phone) VALUES ($1, $2, $3) RETURNING id`,
+        [name.trim(), email.trim(), phone ? phone.trim() : null]
+      );
+      candidateId = newCand.rows[0].id;
+    }
+
+    // 3. Check for existing active application for this position
+    const existingApp = await query(
+      `SELECT id FROM hiring_applications WHERE candidate_id = $1 AND position_id = $2 AND status != 'rejected'`,
+      [candidateId, position_id]
+    );
+    if (existingApp.rows.length > 0) {
+      return res.status(400).json({
+        error: { code: 'ALREADY_APPLIED', message: 'You have already submitted an active application for this position.' }
+      });
+    }
+
+    // 4. Insert application
+    const appRes = await query(
+      `INSERT INTO hiring_applications (candidate_id, position_id, resume_url, cover_letter, status, answers)
+       VALUES ($1, $2, $3, $4, 'applied', $5) RETURNING *`,
+      [candidateId, position_id, resume_url || null, cover_letter || null, JSON.stringify(answers || {})]
+    );
+    const application = appRes.rows[0];
+
+    // 5. Log audit trail event
+    await query(
+      `INSERT INTO hiring_application_history (application_id, changed_by, event_type, notes)
+       VALUES ($1, 'candidate', 'applied', $2)`,
+      [application.id, `Candidate ${name} applied for position ${position.title}`]
+    );
+
+    res.json({ message: 'Application submitted successfully!', application });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /my-applications — List applications for a candidate with generated documents
 router.get('/my-applications', async (req, res, next) => {
   try {
