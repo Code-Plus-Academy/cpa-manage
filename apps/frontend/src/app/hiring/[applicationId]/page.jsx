@@ -27,9 +27,12 @@ export default function ApplicationDetailAdminPage() {
 
   // Offer Letter Approval Preview Modal
   const [showOfferModal, setShowOfferModal] = useState(false);
-  const [offerForm, setOfferForm] = useState({
-    offer_title: '', start_date: '', compensation: '', manager_name: ''
-  });
+  const [showOfferFullscreenPreview, setShowOfferFullscreenPreview] = useState(false);
+  const [offerPreviewZoom, setOfferPreviewZoom] = useState(1);
+  const [selectedOfferTemplateFile, setSelectedOfferTemplateFile] = useState('offer_letter.html');
+  const [detectedOfferVariables, setDetectedOfferVariables] = useState([]);
+  const [dynamicOfferFormFields, setDynamicOfferFormFields] = useState({});
+
   const [offerPreviewHtml, setOfferPreviewHtml] = useState('');
   const [previewLoading, setPreviewLoading] = useState(false);
   const [approving, setApproving] = useState(false);
@@ -90,6 +93,33 @@ export default function ApplicationDetailAdminPage() {
     });
     setDynamicFormFields(initFields);
     setShowCertModal(true);
+  };
+
+  const openOfferIssuanceModal = async () => {
+    const tList = await fetchPolyCertTemplates();
+    const defaultTemplate = tList.find(t => t.filename.includes('offer'))?.filename || tList[0]?.filename || 'offer_letter.html';
+    setSelectedOfferTemplateFile(defaultTemplate);
+
+    const tObj = tList.find(t => t.filename === defaultTemplate);
+    const vars = tObj?.variables || ['name', 'role', 'company_name', 'organization_name', 'compensation', 'start_date', 'date', 'signatory', 'signatory_role', 'signature_text'];
+    setDetectedOfferVariables(vars);
+
+    const initFields = {};
+    vars.forEach(v => {
+      if (v === 'name') initFields[v] = application?.candidate_name || '';
+      else if (v === 'role' || v === 'role_title' || v === 'offer_title') initFields[v] = application?.position_title || 'Software Developer';
+      else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
+      else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
+      else if (v === 'duration') initFields[v] = '6 Months';
+      else if (v === 'compensation') initFields[v] = '$85,000 / Year';
+      else if (v === 'start_date' || v === 'date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      else if (v === 'manager_name' || v === 'signatory') initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'signatory_role' || v === 'signatory_title') initFields[v] = 'Director of Engineering';
+      else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
+      else initFields[v] = '';
+    });
+    setDynamicOfferFormFields(initFields);
+    setShowOfferModal(true);
   };
 
   const messagesEndRef = useRef(null);
@@ -220,17 +250,23 @@ export default function ApplicationDetailAdminPage() {
   };
 
   const handlePreviewOffer = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     try {
       setPreviewLoading(true);
       const res = await apiFetch(`/admin/hiring/applications/${applicationId}/approve-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(offerForm),
+        body: JSON.stringify({
+          template_name: selectedOfferTemplateFile,
+          data: dynamicOfferFormFields
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         setOfferPreviewHtml(data.preview_html);
+        if (data.variables_detected && data.variables_detected.length > 0) {
+          setDetectedOfferVariables(data.variables_detected);
+        }
       }
     } catch (err) {
       console.error('Failed offer preview:', err);
@@ -245,7 +281,10 @@ export default function ApplicationDetailAdminPage() {
       const res = await apiFetch(`/admin/hiring/applications/${applicationId}/approve-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(offerForm),
+        body: JSON.stringify({
+          template_name: selectedOfferTemplateFile,
+          data: dynamicOfferFormFields
+        }),
       });
       if (res.ok) {
         setShowOfferModal(false);
@@ -336,31 +375,45 @@ export default function ApplicationDetailAdminPage() {
               {application?.status}
             </span>
 
+            {/* Offer Letter Action Button */}
             <button
-              onClick={openCertIssuanceModal}
+              onClick={openOfferIssuanceModal}
               style={{
-                padding: '10px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',
+                padding: '10px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)',
                 display: 'inline-flex', alignItems: 'center', gap: '6px'
               }}
             >
-              <Award size={16} /> Issue &amp; Send Certificate
+              <FileText size={16} /> {history.some(h => h.event_type === 'approved' || h.event_type === 'offer_letter') || application?.status === 'approved' ? 'Re-issue Offer Letter' : 'Approve & Issue Offer Letter'}
             </button>
 
-            {application?.status !== 'approved' && (
-              <button
-                onClick={() => {
-                  setOfferForm({ offer_title: application?.position_title || '', start_date: '', compensation: '', manager_name: '' });
-                  setShowOfferModal(true);
-                }}
-                style={{
-                  padding: '10px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                  color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
-                }}
-              >
-                Approve &amp; Send Offer Letter
-              </button>
-            )}
+            {/* Certificate of Completion Action Button (Requires Offer Letter First) */}
+            {(() => {
+              const hasOffer = history.some(h => h.event_type === 'approved' || h.event_type === 'offer_letter' || h.event_type === 'certificate_issued') || application?.status === 'approved';
+              return (
+                <button
+                  onClick={() => {
+                    if (!hasOffer) {
+                      alert('⚠️ Offer Letter Required First!\n\nAn Offer Letter must be issued to the candidate before generating a Certificate of Completion.');
+                      return;
+                    }
+                    openCertIssuanceModal();
+                  }}
+                  style={{
+                    padding: '10px 18px', borderRadius: '8px',
+                    background: !hasOffer ? 'rgba(255, 255, 255, 0.08)' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                    color: !hasOffer ? '#9ca3af' : '#ffffff',
+                    fontWeight: '700', border: !hasOffer ? '1px solid rgba(255,255,255,0.1)' : 'none',
+                    cursor: !hasOffer ? 'not-allowed' : 'pointer',
+                    boxShadow: !hasOffer ? 'none' : '0 4px 14px rgba(99, 102, 241, 0.35)',
+                    display: 'inline-flex', alignItems: 'center', gap: '6px', opacity: !hasOffer ? 0.6 : 1
+                  }}
+                  title={!hasOffer ? "Offer Letter must be issued before generating Certificate of Completion" : "Issue Certificate of Completion"}
+                >
+                  <Award size={16} /> {hasOffer ? 'Issue & Send Certificate' : '🔒 Certificate (Offer First)'}
+                </button>
+              );
+            })()}
           </div>
         </div>
 
@@ -488,64 +541,188 @@ export default function ApplicationDetailAdminPage() {
           </div>
         </div>
 
-        {/* Offer Letter Approval Modal with Live HTML Preview */}
+        {/* Offer Letter Approval Modal with Live PolyCert HTML Preview & Fullscreen Pop-up */}
         {showOfferModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '700px', maxHeight: '90vh', overflowY: 'auto' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '16px', color: '#ffffff' }}>Approve &amp; Generate Offer Letter</h2>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '24px', width: '92%', maxWidth: '840px', maxHeight: '92vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <FileText style={{ color: '#10b981' }} size={22} /> Issue Offer Letter (PolyCert Studio)
+                </h2>
+                <span style={{ fontSize: '12px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '4px 10px', borderRadius: '12px', fontWeight: '600', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                  Dynamic Offer Engine
+                </span>
+              </div>
 
-              <form onSubmit={handlePreviewOffer} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Offer Position Title</label>
-                    <input type="text" value={offerForm.offer_title} onChange={(e) => setOfferForm({ ...offerForm, offer_title: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+              <form onSubmit={handlePreviewOffer} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+                {/* STEP 1: Select PolyCert Offer Template */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' }}>
+                    1. Select PolyCert Offer Letter Template
+                  </label>
+                  <select
+                    value={selectedOfferTemplateFile}
+                    onChange={(e) => {
+                      const newFile = e.target.value;
+                      setSelectedOfferTemplateFile(newFile);
+                      const tObj = availableTemplates.find(t => t.filename === newFile);
+                      const vars = tObj?.variables || ['name', 'role', 'company_name', 'organization_name', 'compensation', 'start_date', 'date', 'signatory', 'signatory_role', 'signature_text'];
+                      setDetectedOfferVariables(vars);
+                      
+                      const initFields = {};
+                      vars.forEach(v => {
+                        if (v === 'name') initFields[v] = application?.candidate_name || '';
+                        else if (v === 'role' || v === 'role_title' || v === 'offer_title') initFields[v] = application?.position_title || 'Software Developer';
+                        else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
+                        else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
+                        else if (v === 'duration') initFields[v] = '6 Months';
+                        else if (v === 'compensation') initFields[v] = '$85,000 / Year';
+                        else if (v === 'start_date' || v === 'date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                        else if (v === 'manager_name' || v === 'signatory') initFields[v] = 'Dr. Alex Vance';
+                        else if (v === 'signatory_role' || v === 'signatory_title') initFields[v] = 'Director of Engineering';
+                        else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
+                        else initFields[v] = '';
+                      });
+                      setDynamicOfferFormFields(initFields);
+                    }}
+                    required
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: '#0a0b10', color: '#fff', fontSize: '14px', fontWeight: '600' }}
+                  >
+                    {availableTemplates.length > 0 ? (
+                      availableTemplates.map((t) => (
+                        <option key={t.filename} value={t.filename}>
+                          📄 {t.name || t.filename} ({t.filename}) {t.is_custom ? '— Custom Template' : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="offer_letter.html">📄 Offer Letter (offer_letter.html)</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* STEP 2: Dynamic Jinja2 Placeholders Form */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Offer Letter Fields &amp; Placeholders ({detectedOfferVariables.length > 0 ? detectedOfferVariables.length : 8} Detected)
+                    </label>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Start Date</label>
-                    <input type="text" placeholder="e.g. October 1, 2026" value={offerForm.start_date} onChange={(e) => setOfferForm({ ...offerForm, start_date: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    {(detectedOfferVariables.length > 0 ? detectedOfferVariables : ['name', 'role', 'company_name', 'compensation', 'start_date', 'signatory', 'signatory_role', 'signature_text']).map((varName) => {
+                      if (varName === 'serial_no' || varName === 'signature_image') return null;
+                      const fieldLabel = varName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                      return (
+                        <div key={varName}>
+                          <label style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '4px' }}>
+                            <span>{fieldLabel}</span>
+                            <span style={{ fontSize: '10px', color: '#34d399', fontFamily: 'monospace' }}>({`{{ ${varName} }}`})</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={dynamicOfferFormFields[varName] !== undefined ? dynamicOfferFormFields[varName] : ''}
+                            onChange={(e) => setDynamicOfferFormFields({ ...dynamicOfferFormFields, [varName]: e.target.value })}
+                            placeholder={`Enter ${fieldLabel}...`}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff', fontSize: '13px' }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Compensation / Stipend</label>
-                    <input type="text" placeholder="e.g. $1,500 / month" value={offerForm.compensation} onChange={(e) => setOfferForm({ ...offerForm, compensation: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Reporting Manager</label>
-                    <input type="text" placeholder="e.g. Engineering Director" value={offerForm.manager_name} onChange={(e) => setOfferForm({ ...offerForm, manager_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                </div>
-
-                <button type="submit" style={{ padding: '8px', borderRadius: '6px', background: '#3b82f6', color: '#fff', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
-                  {previewLoading ? 'Generating Preview...' : 'Preview Offer Letter HTML'}
+                <button type="submit" disabled={previewLoading} style={{ padding: '12px', borderRadius: '8px', background: 'linear-gradient(90deg, #10b981, #059669)', color: '#fff', border: 'none', fontWeight: '700', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)' }}>
+                  {previewLoading ? 'Fetching Jinja2 Offer Template & Rendering...' : '✨ Render & Preview Offer Letter HTML'}
                 </button>
               </form>
 
+              {/* Rendered Preview Bar & Interactive Controls */}
               {offerPreviewHtml && (
-                <div style={{ background: '#ffffff', color: '#000000', padding: '20px', borderRadius: '8px', marginBottom: '20px', maxHeight: '250px', overflowY: 'auto' }}>
-                  <div dangerouslySetInnerHTML={{ __html: offerPreviewHtml }} />
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '10px', marginBottom: '20px', padding: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      👁️ Live Offer Preview ({selectedOfferTemplateFile})
+                    </span>
+                    <button
+                      onClick={() => setShowOfferFullscreenPreview(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      <Maximize2 size={14} /> Open Fullscreen Pop-up Preview
+                    </button>
+                  </div>
+
+                  <div style={{ background: '#ffffff', borderRadius: '8px', padding: '4px', overflow: 'hidden', height: '360px' }}>
+                    <iframe
+                      srcDoc={offerPreviewHtml}
+                      title="PolyCert Offer Letter Preview"
+                      style={{ width: '100%', height: '100%', border: 'none', borderRadius: '6px', background: '#ffffff' }}
+                    />
+                  </div>
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button onClick={() => setShowOfferModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+                <button onClick={() => setShowOfferModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer', fontWeight: '600' }}>
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmApproval}
                   disabled={approving || !offerPreviewHtml}
                   style={{
-                    flex: 1, padding: '10px', borderRadius: '6px', border: 'none',
-                    background: approving ? '#9ca3af' : '#10b981', color: '#fff', fontWeight: '700', cursor: 'pointer'
+                    flex: 1.5, padding: '12px', borderRadius: '8px', border: 'none',
+                    background: approving ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
                   }}
                 >
-                  {approving ? 'Dispatching Offer...' : 'Confirm & Dispatch Offer Letter'}
+                  {approving ? 'Generating & Dispatching Offer Letter...' : '🚀 Confirm & Dispatch Offer Letter'}
                 </button>
               </div>
             </div>
           </div>
         )}
+
+        {/* FULL-SCREEN ADAPTIVE POP-UP PREVIEW MODAL FOR OFFER LETTERS */}
+        {showOfferFullscreenPreview && offerPreviewHtml && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(16px)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: '#12141d', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <FileText style={{ color: '#10b981' }} size={24} />
+                <span style={{ fontSize: '16px', fontWeight: '800', color: '#fff' }}>
+                  PolyCert Offer Letter Pop-up Preview — {selectedOfferTemplateFile}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button onClick={() => setOfferPreviewZoom(prev => Math.max(0.5, prev - 0.15))} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ZoomOut size={16} /> Zoom Out
+                </button>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#34d399', width: '50px', textAlign: 'center' }}>
+                  {Math.round(offerPreviewZoom * 100)}%
+                </span>
+                <button onClick={() => setOfferPreviewZoom(prev => Math.min(2.0, prev + 0.15))} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ZoomIn size={16} /> Zoom In
+                </button>
+                <button onClick={() => setOfferPreviewZoom(1.0)} style={{ padding: '8px 12px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                  Fit Width
+                </button>
+
+                <button onClick={() => setShowOfferFullscreenPreview(false)} style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Minimize2 size={16} /> Close Pop-up
+                </button>
+              </div>
+            </div>
+
+            <div style={{ flex: 1, padding: '24px', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0b10' }}>
+              <div style={{ width: '100%', height: '100%', maxWidth: '1100px', background: '#ffffff', borderRadius: '12px', boxShadow: '0 25px 60px rgba(0,0,0,0.8)', overflow: 'hidden', transform: `scale(${offerPreviewZoom})`, transformOrigin: 'top center', transition: 'transform 0.2s ease-in-out' }}>
+                <iframe
+                  srcDoc={offerPreviewHtml}
+                  title="PolyCert Fullscreen Offer Letter Preview"
+                  style={{ width: '100%', height: '100%', minHeight: '750px', border: 'none', background: '#ffffff' }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Certificate / Document Generation Modal with Live HTML Preview & Fullscreen Pop-up */}
         {showCertModal && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>

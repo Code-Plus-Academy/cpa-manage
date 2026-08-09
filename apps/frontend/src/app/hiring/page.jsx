@@ -20,6 +20,7 @@ export default function HiringAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('ALL');
+  const [kanbanStageFilter, setKanbanStageFilter] = useState('ALL'); // 'ALL' | 'applied' | 'in_review' | 'interview' | 'approved' | 'rejected'
 
   // PolyCert Studio Synchronized Template Editor States
   const [polyCertStudioTemplates, setPolyCertStudioTemplates] = useState([]);
@@ -511,65 +512,172 @@ export default function HiringAdminDashboard() {
               )}
             </div>
 
-            {/* Kanban Columns Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', overflowX: 'auto', minHeight: '550px' }}>
-              {kanbanColumns.map((col) => {
-                const colApps = filteredApps.filter((a) => (a.status || 'applied').toLowerCase() === col.id);
+            {/* Stage Navigation Bar */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {[
+                { id: 'ALL', label: '📊 All Stages (Kanban Board)', color: '#818cf8', count: filteredApps.length },
+                { id: 'applied', label: '📥 Applied', color: '#60a5fa', count: filteredApps.filter(a => (a.status || 'applied').toLowerCase() === 'applied').length },
+                { id: 'in_review', label: '🔍 In Review', color: '#fbbf24', count: filteredApps.filter(a => a.status === 'in_review').length },
+                { id: 'interview', label: '💬 Interview', color: '#c084fc', count: filteredApps.filter(a => a.status === 'interview').length },
+                { id: 'approved', label: '✨ Approved', color: '#34d399', count: filteredApps.filter(a => a.status === 'approved').length },
+                { id: 'rejected', label: '❌ Rejected', color: '#f87171', count: filteredApps.filter(a => a.status === 'rejected').length },
+              ].map((stage) => {
+                const isSelected = kanbanStageFilter === stage.id;
                 return (
-                  <div key={col.id} style={{ background: 'rgba(18, 20, 29, 0.5)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: `2px solid ${col.color}`, paddingBottom: '8px' }}>
-                      <span style={{ fontSize: '13px', fontWeight: '700', color: '#ffffff' }}>{col.label}</span>
-                      <span style={{ fontSize: '11px', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 8px', borderRadius: '9999px', fontWeight: '700' }}>{colApps.length}</span>
-                    </div>
-
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      {colApps.map((app) => (
-                        <div
-                          key={app.id}
-                          style={{
-                            background: 'rgba(10, 11, 16, 0.7)', border: '1px solid rgba(255, 255, 255, 0.08)',
-                            borderRadius: '10px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <input
-                              type="checkbox"
-                              checked={bulkSelected.includes(app.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) setBulkSelected([...bulkSelected, app.id]);
-                                else setBulkSelected(bulkSelected.filter((i) => i !== app.id));
-                              }}
-                            />
-                            <select
-                              value={app.status || 'applied'}
-                              onChange={(e) => handleStatusChange(app.id, e.target.value)}
-                              style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '11px', cursor: 'pointer' }}
-                            >
-                              <option value="applied">Applied</option>
-                              <option value="in_review">In Review</option>
-                              <option value="interview">Interview</option>
-                              <option value="approved">Approved</option>
-                              <option value="rejected">Rejected</option>
-                            </select>
-                          </div>
-
-                          <div style={{ fontWeight: '700', fontSize: '14px', color: '#ffffff', marginTop: '6px' }}>{app.candidate_name}</div>
-                          <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{app.candidate_email}</div>
-                          <div style={{ fontSize: '11px', color: '#818cf8', fontWeight: '600', marginTop: '8px' }}>{app.position_title}</div>
-
-                          <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '10px', color: '#6b7280' }}>{new Date(app.applied_at).toLocaleDateString()}</span>
-                            <Link href={`/hiring/${app.id}`} style={{ fontSize: '11px', color: '#6366f1', textDecoration: 'none', fontWeight: '600' }}>
-                              Review Details →
-                            </Link>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <button
+                    key={stage.id}
+                    onClick={() => setKanbanStageFilter(stage.id)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px',
+                      borderRadius: '8px', border: isSelected ? `1px solid ${stage.color}` : '1px solid rgba(255,255,255,0.08)',
+                      background: isSelected ? `${stage.color}20` : 'rgba(18, 20, 29, 0.6)',
+                      color: isSelected ? '#ffffff' : '#9ca3af', fontWeight: '700', fontSize: '13px', cursor: 'pointer',
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                  >
+                    <span>{stage.label}</span>
+                    <span style={{ fontSize: '11px', background: isSelected ? stage.color : 'rgba(255,255,255,0.1)', color: isSelected ? '#000' : '#fff', padding: '1px 7px', borderRadius: '9999px', fontWeight: '800' }}>
+                      {stage.count}
+                    </span>
+                  </button>
                 );
               })}
             </div>
+
+            {/* Conditional Render: 5-Column Kanban vs Dedicated Single-Stage Full Workspace */}
+            {kanbanStageFilter === 'ALL' ? (
+              /* 5-Column Overview Kanban Columns Grid */
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', overflowX: 'auto', minHeight: '550px' }}>
+                {kanbanColumns.map((col) => {
+                  const colApps = filteredApps.filter((a) => (a.status || 'applied').toLowerCase() === col.id);
+                  return (
+                    <div key={col.id} style={{ background: 'rgba(18, 20, 29, 0.5)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: `2px solid ${col.color}`, paddingBottom: '8px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#ffffff' }}>{col.label}</span>
+                        <span style={{ fontSize: '11px', background: 'rgba(255, 255, 255, 0.08)', padding: '2px 8px', borderRadius: '9999px', fontWeight: '700' }}>{colApps.length}</span>
+                      </div>
+
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {colApps.map((app) => (
+                          <div
+                            key={app.id}
+                            style={{
+                              background: 'rgba(10, 11, 16, 0.7)', border: '1px solid rgba(255, 255, 255, 0.08)',
+                              borderRadius: '10px', padding: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <input
+                                type="checkbox"
+                                checked={bulkSelected.includes(app.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setBulkSelected([...bulkSelected, app.id]);
+                                  else setBulkSelected(bulkSelected.filter((i) => i !== app.id));
+                                }}
+                              />
+                              <select
+                                value={app.status || 'applied'}
+                                onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                                style={{ background: 'transparent', border: 'none', color: '#9ca3af', fontSize: '11px', cursor: 'pointer' }}
+                              >
+                                <option value="applied">Applied</option>
+                                <option value="in_review">In Review</option>
+                                <option value="interview">Interview</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                              </select>
+                            </div>
+
+                            <div style={{ fontWeight: '700', fontSize: '14px', color: '#ffffff', marginTop: '6px' }}>{app.candidate_name}</div>
+                            <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>{app.candidate_email}</div>
+                            <div style={{ fontSize: '11px', color: '#818cf8', fontWeight: '600', marginTop: '8px' }}>{app.position_title}</div>
+
+                            <div style={{ marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span style={{ fontSize: '10px', color: '#6b7280' }}>{new Date(app.applied_at).toLocaleDateString()}</span>
+                              <Link href={`/hiring/${app.id}`} style={{ fontSize: '11px', color: '#6366f1', textDecoration: 'none', fontWeight: '600' }}>
+                                Review Details →
+                              </Link>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* Dedicated Single Stage Full-Window View */
+              <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '14px', padding: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', textTransform: 'capitalize', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {kanbanStageFilter.replace('_', ' ')} Candidates Workspace ({filteredApps.filter(a => (a.status || 'applied').toLowerCase() === kanbanStageFilter).length})
+                    </h2>
+                    <p style={{ fontSize: '13px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+                      Dedicated full-window view for sorting, reviewing, and managing candidates in stage: <strong style={{ color: '#818cf8' }}>{kanbanStageFilter}</strong>.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setKanbanStageFilter('ALL')}
+                    style={{ padding: '8px 14px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                  >
+                    ← Switch Back to All 5 Columns
+                  </button>
+                </div>
+
+                {/* 3-Column Spacious Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                  {filteredApps.filter(a => (a.status || 'applied').toLowerCase() === kanbanStageFilter).length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: '60px', textAlign: 'center', color: '#9ca3af', background: 'rgba(10, 11, 16, 0.4)', borderRadius: '12px' }}>
+                      No candidates found in <strong>{kanbanStageFilter}</strong> stage matching your search query.
+                    </div>
+                  ) : (
+                    filteredApps.filter(a => (a.status || 'applied').toLowerCase() === kanbanStageFilter).map(app => (
+                      <div
+                        key={app.id}
+                        style={{
+                          background: 'rgba(10, 11, 16, 0.8)', border: '1px solid rgba(255, 255, 255, 0.08)',
+                          borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                          boxShadow: '0 4px 14px rgba(0,0,0,0.3)'
+                        }}
+                      >
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <span style={{ fontSize: '11px', color: '#818cf8', fontWeight: '700', textTransform: 'uppercase', background: 'rgba(99, 102, 241, 0.15)', padding: '2px 8px', borderRadius: '4px' }}>
+                              {app.position_title}
+                            </span>
+                            <select
+                              value={app.status || 'applied'}
+                              onChange={(e) => handleStatusChange(app.id, e.target.value)}
+                              style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', fontSize: '11px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
+                            >
+                              <option value="applied">Move to Applied</option>
+                              <option value="in_review">Move to In Review</option>
+                              <option value="interview">Move to Interview</option>
+                              <option value="approved">Move to Approved</option>
+                              <option value="rejected">Move to Rejected</option>
+                            </select>
+                          </div>
+
+                          <h3 style={{ fontSize: '16px', fontWeight: '800', color: '#ffffff', margin: '6px 0 2px 0' }}>{app.candidate_name}</h3>
+                          <div style={{ fontSize: '13px', color: '#9ca3af' }}>{app.candidate_email}</div>
+                          {app.candidate_phone && <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>📞 {app.candidate_phone}</div>}
+                        </div>
+
+                        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '11px', color: '#6b7280' }}>
+                            Applied: {new Date(app.applied_at).toLocaleDateString()}
+                          </span>
+                          <Link href={`/hiring/${app.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '6px 12px', borderRadius: '6px', background: 'linear-gradient(90deg, #6366f1, #4f46e5)', color: '#fff', fontSize: '12px', fontWeight: '700', textDecoration: 'none' }}>
+                            Review Details →
+                          </Link>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

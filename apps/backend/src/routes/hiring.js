@@ -488,11 +488,12 @@ router.post('/applications/:id/messages', async (req, res, next) => {
 
 // ─── 4. APPROVAL WORKFLOW & OFFER LETTER PREVIEW ─────────────────────────────
 
-// POST /applications/:id/approve-preview — Render HTML offer preview
+// POST /applications/:id/approve-preview — Render Jinja2 HTML preview for Offer Letter using PolyCert Studio
 router.post('/applications/:id/approve-preview', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { offer_title, start_date, compensation, manager_name } = req.body;
+    const { template_name, data: providedData } = req.body;
+    const formFields = providedData || req.body || {};
 
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
@@ -508,35 +509,45 @@ router.post('/applications/:id/approve-preview', async (req, res, next) => {
     }
 
     const app = appRes.rows[0];
+    const targetTemplate = template_name || req.body.template_name || 'offer_letter.html';
+    const previewSerial = `OFFER-${new Date().getFullYear()}-PREVIEW`;
 
-    const previewHtml = `
-      <div style="font-family: Arial, sans-serif; padding: 30px; line-height: 1.6; color: #111;">
-        <h2 style="color: #4f46e5;">OFFER OF EMPLOYMENT</h2>
-        <p>Date: <strong>${new Date().toLocaleDateString()}</strong></p>
-        <p>Dear <strong>${app.candidate_name}</strong>,</p>
-        <p>We are thrilled to offer you the position of <strong>${offer_title || app.position_title}</strong> at <strong>Code+ Academy</strong>!</p>
-        <ul>
-          <li><strong>Start Date:</strong> ${start_date || 'Immediate'}</li>
-          <li><strong>Compensation:</strong> ${compensation || 'Standard Rate'}</li>
-          <li><strong>Reporting Manager:</strong> ${manager_name || 'Engineering Lead'}</li>
-        </ul>
-        <p>Please review and confirm your acceptance.</p>
-        <br/>
-        <p>Sincerely,<br/><strong>Hiring Team, Code+ Academy</strong></p>
-      </div>
-    `;
+    const templateData = {
+      name: app.candidate_name,
+      role: formFields.role || formFields.offer_title || app.position_title,
+      company_name: formFields.company_name || formFields.organization_name || 'Code+ Academy',
+      organization_name: formFields.organization_name || 'Code Plus Academy',
+      holding_company: 'Code Plus Education',
+      serial_no: previewSerial,
+      date: formFields.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      duration: formFields.duration || '6 Months',
+      compensation: formFields.compensation || '$85,000 / Year',
+      signatory: formFields.signatory || 'Dr. Alex Vance',
+      signatory_role: formFields.signatory_role || 'Director of Engineering',
+      signature_text: formFields.signature_text || formFields.signatory || 'Dr. Alex Vance',
+      ...formFields
+    };
 
-    res.json({ preview_html: previewHtml, candidate_name: app.candidate_name, candidate_email: app.candidate_email });
+    const previewResult = await documentTriggerService.renderPolyCertTemplatePreview(targetTemplate, templateData);
+
+    res.json({
+      preview_html: previewResult.rendered_html,
+      variables_detected: previewResult.variables,
+      filename: previewResult.filename,
+      candidate_name: app.candidate_name,
+      candidate_email: app.candidate_email
+    });
   } catch (error) {
     next(error);
   }
 });
 
-// POST /applications/:id/approve-confirm — Commit approval & dispatch offer with atomic sequential serial (e.g. OFFER-2026-000142)
+// POST /applications/:id/approve-confirm — Commit approval & dispatch offer with atomic sequential serial via PolyCert Studio
 router.post('/applications/:id/approve-confirm', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { offer_title, start_date, compensation, manager_name } = req.body;
+    const { template_name, data: providedData } = req.body;
+    const formFields = providedData || req.body || {};
 
     const appRes = await query(
       `UPDATE hiring_applications SET status = 'approved', offer_status = 'sent', updated_at = NOW() WHERE id = $1 RETURNING *`,
@@ -548,6 +559,7 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
     }
 
     const app = appRes.rows[0];
+    const targetTemplate = template_name || req.body.template_name || 'offer_letter.html';
     const serialNumber = await generateSequentialSerialNumber('OFFER');
     const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
 
@@ -559,18 +571,26 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
        RETURNING *`,
       [
         id,
-        `<div>Offer Letter HTML for ${app.candidate_id}</div>`,
+        `<div>Offer Letter HTML for candidate (${serialNumber})</div>`,
         serialNumber,
         verificationCode,
-        JSON.stringify({ offer_title, start_date, compensation, manager_name }),
+        JSON.stringify(formFields),
         app.candidate_email || 'candidate@example.com'
       ]
     );
 
     const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id, {
-      offer_title,
+      document_type: 'offer_letter',
+      template_name: targetTemplate,
       serial_number: serialNumber,
-      compensation
+      role: formFields.role || formFields.offer_title || app.position_title,
+      company_name: formFields.company_name || 'Code+ Academy',
+      organization_name: formFields.organization_name || 'Code Plus Academy',
+      compensation: formFields.compensation || 'Standard Rate',
+      signatory: formFields.signatory || 'Dr. Alex Vance',
+      signatory_role: formFields.signatory_role || 'Director of Engineering',
+      signature_text: formFields.signature_text || 'Dr. Alex Vance',
+      ...formFields
     });
 
     res.json({
@@ -638,6 +658,21 @@ router.post('/applications/:id/issue-certificate-preview', async (req, res, next
     const { id } = req.params;
     const { template_name, data: providedData } = req.body;
 
+    // Sequential Lifecycle Check: Verify an Offer Letter has already been issued
+    const offerCheck = await query(
+      `SELECT COUNT(*) FROM hiring_generated_documents WHERE application_id = $1 AND (document_type = 'offer_letter' OR document_type = 'offer')`,
+      [id]
+    );
+
+    if (parseInt(offerCheck.rows[0].count, 10) === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'OFFER_LETTER_REQUIRED',
+          message: 'An Offer Letter must be issued before generating a Certificate of Completion.'
+        }
+      });
+    }
+
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
        FROM hiring_applications a
@@ -693,6 +728,21 @@ router.post('/applications/:id/issue-certificate-confirm', async (req, res, next
     const { id } = req.params;
     const { template_name, data: providedData } = req.body;
     const formFields = providedData || req.body || {};
+
+    // Sequential Lifecycle Check: Verify an Offer Letter has already been issued
+    const offerCheck = await query(
+      `SELECT COUNT(*) FROM hiring_generated_documents WHERE application_id = $1 AND (document_type = 'offer_letter' OR document_type = 'offer')`,
+      [id]
+    );
+
+    if (parseInt(offerCheck.rows[0].count, 10) === 0) {
+      return res.status(400).json({
+        error: {
+          code: 'OFFER_LETTER_REQUIRED',
+          message: 'An Offer Letter must be issued before generating a Certificate of Completion.'
+        }
+      });
+    }
 
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
