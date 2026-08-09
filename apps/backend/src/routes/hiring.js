@@ -259,10 +259,52 @@ router.delete('/positions/:id', async (req, res, next) => {
 
 // ─── 2. CANDIDATE & APPLICATION PIPELINE ──────────────────────────────────────
 
+// GET /my-applications — List applications for a candidate with generated documents
+router.get('/my-applications', async (req, res, next) => {
+  try {
+    const { candidate_id, email } = req.query;
+    if (!candidate_id && !email) {
+      return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'candidate_id or email is required' } });
+    }
+
+    const conditions = [];
+    const values = [];
+    let idx = 1;
+
+    if (candidate_id) {
+      conditions.push(`(a.candidate_id = $${idx} OR c.id::text = $${idx})`);
+      values.push(candidate_id);
+      idx++;
+    }
+    if (email) {
+      conditions.push(`c.email ILIKE $${idx}`);
+      values.push(email);
+      idx++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(' OR ')}`;
+    const result = await query(
+      `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
+              p.title AS position_title, p.department AS position_department, p.type AS position_type, p.location AS position_location,
+              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id = a.id) AS documents
+       FROM hiring_applications a
+       JOIN hiring_candidates c ON a.candidate_id = c.id
+       JOIN hiring_positions p ON a.position_id = p.id
+       ${whereClause}
+       ORDER BY a.applied_at DESC`,
+      values
+    );
+
+    res.json({ applications: result.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /applications — List applications
 router.get('/applications', async (req, res, next) => {
   try {
-    const { status, position_id, search } = req.query;
+    const { status, position_id, search, candidate_id, candidate_email } = req.query;
     const conditions = [];
     const values = [];
     let idx = 1;
@@ -275,6 +317,16 @@ router.get('/applications', async (req, res, next) => {
       conditions.push(`a.position_id = $${idx++}`);
       values.push(position_id);
     }
+    if (candidate_id) {
+      conditions.push(`(a.candidate_id = $${idx} OR c.id::text = $${idx})`);
+      values.push(candidate_id);
+      idx++;
+    }
+    if (candidate_email) {
+      conditions.push(`c.email ILIKE $${idx}`);
+      values.push(candidate_email);
+      idx++;
+    }
     if (search) {
       conditions.push(`(c.name ILIKE $${idx} OR c.email ILIKE $${idx} OR p.title ILIKE $${idx})`);
       values.push(`%${search}%`);
@@ -284,7 +336,8 @@ router.get('/applications', async (req, res, next) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
-              p.title AS position_title, p.department AS position_department, p.type AS position_type
+              p.title AS position_title, p.department AS position_department, p.type AS position_type,
+              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id = a.id) AS documents
        FROM hiring_applications a
        JOIN hiring_candidates c ON a.candidate_id = c.id
        JOIN hiring_positions p ON a.position_id = p.id
