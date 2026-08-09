@@ -3,79 +3,24 @@ const { query } = require('../config/db');
 const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL || 'https://certification-bacnkend.onrender.com';
 const PDF_SERVICE_API_KEY = process.env.PDF_SERVICE_API_KEY || 'cpa_sk_89f2a71e4b9d0831';
 
-let storedSessionCookie = '';
-
 /**
- * Authenticate session against PolyCert Studio (/login) to obtain Flask session cookie.
- */
-async function polyCertLogin() {
-  try {
-    const params = new URLSearchParams();
-    params.append('api_key', PDF_SERVICE_API_KEY);
-
-    const res = await fetch(`${PDF_SERVICE_URL}/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      },
-      body: params.toString(),
-      redirect: 'manual'
-    });
-
-    const cookieHeader = res.headers.get('set-cookie');
-    if (cookieHeader) {
-      const match = cookieHeader.match(/session=[^;]+/);
-      if (match) {
-        storedSessionCookie = match[0];
-        console.log('[DocumentTrigger] Successfully authenticated PolyCert session cookie');
-        return storedSessionCookie;
-      }
-    }
-    return '';
-  } catch (err) {
-    console.error(`[DocumentTrigger] PolyCert login failed: ${err.message}`);
-    return '';
-  }
-}
-
-/**
- * Robust fetch wrapper for PolyCert Studio API that handles automatic session authentication.
+ * Direct fetch wrapper for PolyCert Studio API using X-API-Key & Bearer header.
  */
 async function polyCertFetch(urlPath, options = {}) {
   const fullUrl = urlPath.startsWith('http') ? urlPath : `${PDF_SERVICE_URL}${urlPath}`;
   const method = options.method || 'GET';
   const headers = {
+    'Content-Type': 'application/json',
     'X-API-Key': PDF_SERVICE_API_KEY,
+    'Authorization': `Bearer ${PDF_SERVICE_API_KEY}`,
     ...(options.headers || {})
   };
 
-  if (storedSessionCookie) {
-    headers['Cookie'] = storedSessionCookie;
-  }
-
-  let response = await fetch(fullUrl, {
+  return await fetch(fullUrl, {
     ...options,
     method,
-    headers,
-    redirect: 'manual'
+    headers
   });
-
-  // If redirected to /login (302) or unauthorized (401), authenticate and retry
-  if (response.status === 302 || response.status === 401 || response.headers.get('location')?.includes('/login')) {
-    console.log('[DocumentTrigger] PolyCert session unauthenticated. Authenticating via POST /login...');
-    const cookie = await polyCertLogin();
-    if (cookie) {
-      headers['Cookie'] = cookie;
-    }
-    response = await fetch(fullUrl, {
-      ...options,
-      method,
-      headers,
-      redirect: 'follow'
-    });
-  }
-
-  return response;
 }
 
 /**
