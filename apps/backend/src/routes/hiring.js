@@ -586,7 +586,17 @@ router.post('/applications/:id/approve-confirm', async (req, res, next) => {
   }
 });
 
-// POST /applications/:id/issue-certificate-preview — Render HTML certificate preview
+// GET /polycert/templates — Fetch installed Jinja2 templates directly from PolyCert Studio API
+router.get('/polycert/templates', async (req, res, next) => {
+  try {
+    const templates = await documentTriggerService.fetchPolyCertTemplates();
+    res.json({ templates });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /applications/:id/issue-certificate-preview — Fetch Jinja2 template from PolyCert Studio API & render HTML preview
 router.post('/applications/:id/issue-certificate-preview', async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -606,29 +616,34 @@ router.post('/applications/:id/issue-certificate-preview', async (req, res, next
     }
 
     const app = appRes.rows[0];
+    const targetTemplate = template_name || 'certificate.html';
+    const previewSerial = `CERT-${new Date().getFullYear()}-PREVIEW`;
 
-    const previewHtml = `
-      <div style="font-family: 'Times New Roman', serif; padding: 40px; text-align: center; border: 4px double #4f46e5; background: #ffffff; color: #111827;">
-        <h1 style="color: #312e81; font-size: 28px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px;">Certificate of Completion</h1>
-        <p style="font-style: italic; color: #4b5563; font-size: 14px; margin-bottom: 20px;">This certificate is proudly presented to</p>
-        <h2 style="color: #4f46e5; font-size: 32px; font-weight: bold; margin: 10px 0; border-bottom: 2px solid #e0e7ff; display: inline-block; padding-bottom: 4px;">${app.candidate_name}</h2>
-        <p style="color: #374151; font-size: 15px; max-width: 500px; margin: 20px auto; line-height: 1.6;">
-          For successfully completing the <strong>${role_title || app.position_title}</strong> internship/program at <strong>${organization_name || 'Code Plus Academy'}</strong> for a duration of <strong>${duration || '6 Months'}</strong>.
-        </p>
-        <div style="margin-top: 40px; display: flex; justify-content: space-around; align-items: flex-end;">
-          <div>
-            <p style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 24px; color: #1e1b4b; margin: 0;">${signature_text || signatory || 'Dr. Alex Vance'}</p>
-            <p style="font-size: 12px; font-weight: bold; border-top: 1px solid #9ca3af; padding-top: 4px; color: #4b5563; margin-top: 4px;">${signatory || 'Dr. Alex Vance'}<br/><span style="font-weight: normal; color: #6b7280;">${signatory_role || 'Director of Engineering'}</span></p>
-          </div>
-          <div>
-            <p style="font-size: 13px; font-weight: bold; color: #4b5563; margin: 0;">Date: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
-            <p style="font-size: 11px; color: #9ca3af; margin-top: 4px;">Code Plus Academy Verification System</p>
-          </div>
-        </div>
-      </div>
-    `;
+    const templateData = {
+      name: app.candidate_name,
+      role: role_title || app.position_title,
+      organization_name: organization_name || 'Code Plus Academy',
+      company_name: organization_name || 'Code+ Academy',
+      holding_company: 'Code Plus Education',
+      serial_no: previewSerial,
+      date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      duration: duration || '6 Months',
+      signatory: signatory || 'Dr. Alex Vance',
+      signatory_role: signatory_role || 'Director of Engineering',
+      signature_text: signature_text || signatory || 'Dr. Alex Vance',
+      doc_tag: 'OFFICIAL CERTIFICATE',
+      eyebrow: 'CODE PLUS ACADEMY CREDENTIAL'
+    };
 
-    res.json({ preview_html: previewHtml, candidate_name: app.candidate_name, candidate_email: app.candidate_email });
+    const previewResult = await documentTriggerService.renderPolyCertTemplatePreview(targetTemplate, templateData);
+
+    res.json({
+      preview_html: previewResult.rendered_html,
+      variables_detected: previewResult.variables,
+      filename: previewResult.filename,
+      candidate_name: app.candidate_name,
+      candidate_email: app.candidate_email
+    });
   } catch (error) {
     next(error);
   }

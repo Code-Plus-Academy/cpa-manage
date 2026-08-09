@@ -4,6 +4,80 @@ const PDF_SERVICE_URL = process.env.PDF_SERVICE_URL || 'https://certification-ba
 const PDF_SERVICE_API_KEY = process.env.PDF_SERVICE_API_KEY || 'cpa_sk_89f2a71e4b9d0831';
 
 /**
+ * Fetch all installed Jinja2 templates and variable definitions from PolyCert Studio.
+ */
+async function fetchPolyCertTemplates() {
+  try {
+    const response = await fetch(`${PDF_SERVICE_URL}/api/templates`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': PDF_SERVICE_API_KEY
+      }
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`PolyCert API returned status ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data.templates || [];
+  } catch (err) {
+    console.error(`[DocumentTrigger] Failed to fetch PolyCert templates: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Fetch raw template HTML and Jinja2 variables for a specific template file from PolyCert Studio.
+ */
+async function getPolyCertTemplateHtml(filename) {
+  try {
+    const response = await fetch(`${PDF_SERVICE_URL}/api/templates/${encodeURIComponent(filename)}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-Key': PDF_SERVICE_API_KEY
+      }
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`PolyCert API returned status ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error(`[DocumentTrigger] Failed to fetch HTML for PolyCert template '${filename}': ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Render a live Jinja2 HTML preview by fetching the template from PolyCert Studio and substituting variables.
+ */
+async function renderPolyCertTemplatePreview(templateName, templateData = {}) {
+  const tplInfo = await getPolyCertTemplateHtml(templateName);
+  let html = tplInfo.html_content || '';
+
+  // Substitute Jinja2 {{ variable }} placeholders with values
+  Object.entries(templateData).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) {
+      const pattern = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
+      html = html.replace(pattern, String(value));
+    }
+  });
+
+  return {
+    filename: tplInfo.filename,
+    variables: tplInfo.variables || [],
+    rendered_html: html
+  };
+}
+
+/**
  * Trigger document generation via Python PDF Automation Service (Certification Backend).
  * Generates offer letter / certificate PDF and updates pdf_url in hiring_generated_documents.
  */
@@ -20,7 +94,7 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
 
     if (appRes.rows.length === 0) {
       console.log(`[DocumentTrigger] Application ${applicationId} not found`);
-      return 'application_not_found';
+      throw new Error(`Application ${applicationId} not found`);
     }
 
     const app = appRes.rows[0];
@@ -45,7 +119,7 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
       }
     };
 
-    console.log(`[DocumentTrigger] Calling PDF Service at ${PDF_SERVICE_URL}/api/generate-certificate-info for application ${applicationId}...`);
+    console.log(`[DocumentTrigger] Calling PolyCert Studio API at ${PDF_SERVICE_URL}/api/generate-certificate-info for application ${applicationId}...`);
 
     const response = await fetch(`${PDF_SERVICE_URL}/api/generate-certificate-info`, {
       method: 'POST',
@@ -58,8 +132,8 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.warn(`[DocumentTrigger] PDF Service returned status ${response.status}: ${errText}`);
-      return 'pdf_service_error';
+      console.error(`[DocumentTrigger] PolyCert API error status ${response.status}: ${errText}`);
+      throw new Error(`PolyCert PDF Generation failed (${response.status}): ${errText}`);
     }
 
     const resData = await response.json();
@@ -80,11 +154,21 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
       console.log(`[DocumentTrigger] Successfully generated PDF for app ${applicationId} (${docType}): ${generatedPdfUrl}`);
     }
 
-    return 'generated';
+    return {
+      status: 'generated',
+      pdf_url: generatedPdfUrl,
+      request_id: resData.request_id,
+      certificate_serial: resData.certificate_serial
+    };
   } catch (err) {
-    console.warn(`[DocumentTrigger] Could not connect to PDF Automation Service at ${PDF_SERVICE_URL}: ${err.message}. (PDF generation logged as pending).`);
-    return 'fallback_stubbed';
+    console.error(`[DocumentTrigger] Error in PolyCert PDF Generation: ${err.message}`);
+    throw err;
   }
 }
 
-module.exports = { triggerDocumentGeneration };
+module.exports = {
+  fetchPolyCertTemplates,
+  getPolyCertTemplateHtml,
+  renderPolyCertTemplatePreview,
+  triggerDocumentGeneration
+};

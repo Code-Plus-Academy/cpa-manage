@@ -36,6 +36,7 @@ export default function ApplicationDetailAdminPage() {
 
   // Certificate Generation Preview Modal
   const [showCertModal, setShowCertModal] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState([]);
   const [certForm, setCertForm] = useState({
     role_title: '',
     duration: '6 Months',
@@ -48,6 +49,20 @@ export default function ApplicationDetailAdminPage() {
   const [certPreviewHtml, setCertPreviewHtml] = useState('');
   const [certPreviewLoading, setCertPreviewLoading] = useState(false);
   const [issuingCert, setIssuingCert] = useState(false);
+
+  const fetchPolyCertTemplates = async () => {
+    try {
+      const res = await apiFetch('/admin/hiring/polycert/templates');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.templates && data.templates.length > 0) {
+          setAvailableTemplates(data.templates);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch PolyCert templates:', err);
+    }
+  };
 
   const messagesEndRef = useRef(null);
 
@@ -286,6 +301,7 @@ export default function ApplicationDetailAdminPage() {
 
             <button
               onClick={() => {
+                fetchPolyCertTemplates();
                 setCertForm({
                   role_title: application?.position_title || '',
                   duration: '6 Months',
@@ -531,8 +547,23 @@ export default function ApplicationDetailAdminPage() {
                     <input type="text" value={certForm.organization_name} onChange={(e) => setCertForm({ ...certForm, organization_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Template Filename</label>
-                    <input type="text" value={certForm.template_name} onChange={(e) => setCertForm({ ...certForm, template_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>PolyCert Studio Jinja2 Template</label>
+                    <select
+                      value={certForm.template_name}
+                      onChange={(e) => setCertForm({ ...certForm, template_name: e.target.value })}
+                      required
+                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}
+                    >
+                      {availableTemplates.length > 0 ? (
+                        availableTemplates.map((t) => (
+                          <option key={t.filename} value={t.filename}>
+                            {t.name || t.filename} ({t.filename})
+                          </option>
+                        ))
+                      ) : (
+                        <option value="certificate.html">Certificate (certificate.html)</option>
+                      )}
+                    </select>
                   </div>
                 </div>
 
@@ -551,14 +582,18 @@ export default function ApplicationDetailAdminPage() {
                   </div>
                 </div>
 
-                <button type="submit" style={{ padding: '10px', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
-                  {certPreviewLoading ? 'Generating Preview...' : 'Preview Certificate HTML'}
+                <button type="submit" disabled={certPreviewLoading} style={{ padding: '10px', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
+                  {certPreviewLoading ? 'Fetching Jinja2 Template from PolyCert Studio...' : 'Preview Jinja2 Certificate HTML'}
                 </button>
               </form>
 
               {certPreviewHtml && (
-                <div style={{ background: '#ffffff', color: '#000000', padding: '16px', borderRadius: '8px', marginBottom: '20px', maxHeight: '280px', overflowY: 'auto' }}>
-                  <div dangerouslySetInnerHTML={{ __html: certPreviewHtml }} />
+                <div style={{ background: '#ffffff', borderRadius: '8px', marginBottom: '20px', padding: '4px', border: '1px solid rgba(255,255,255,0.2)' }}>
+                  <iframe
+                    srcDoc={certPreviewHtml}
+                    title="PolyCert Certificate Preview"
+                    style={{ width: '100%', height: '320px', border: 'none', borderRadius: '6px', background: '#ffffff' }}
+                  />
                 </div>
               )}
 
