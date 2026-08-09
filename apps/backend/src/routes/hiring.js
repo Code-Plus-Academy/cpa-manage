@@ -31,7 +31,9 @@ router.get('/positions', async (req, res, next) => {
     const values = [];
     let idx = 1;
 
-    if (status) {
+    if (status === 'public') {
+      conditions.push(`status != 'draft'`);
+    } else if (status) {
       conditions.push(`status = $${idx++}`);
       values.push(status);
     }
