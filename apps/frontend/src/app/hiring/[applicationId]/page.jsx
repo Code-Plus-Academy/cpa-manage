@@ -54,11 +54,42 @@ export default function ApplicationDetailAdminPage() {
         const data = await res.json();
         if (data.templates && data.templates.length > 0) {
           setAvailableTemplates(data.templates);
+          return data.templates;
         }
       }
     } catch (err) {
       console.error('Failed to fetch PolyCert templates:', err);
     }
+    return [];
+  };
+
+  const openCertIssuanceModal = async () => {
+    const tList = await fetchPolyCertTemplates();
+    const defaultTemplate = tList[0]?.filename || selectedTemplateFile || 'certificate.html';
+    setSelectedTemplateFile(defaultTemplate);
+
+    const tObj = tList.find(t => t.filename === defaultTemplate);
+    const vars = tObj?.variables || ['name', 'role', 'organization_name', 'duration', 'date', 'signatory', 'signatory_role', 'signature_text'];
+    setDetectedVariables(vars);
+
+    const initFields = {};
+    vars.forEach(v => {
+      if (v === 'name') initFields[v] = application?.candidate_name || '';
+      else if (v === 'role' || v === 'role_title') initFields[v] = application?.position_title || 'Software Developer';
+      else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
+      else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
+      else if (v === 'duration') initFields[v] = '6 Months';
+      else if (v === 'signatory' || v === 'program_lead') initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'signatory_role' || v === 'signatory_title' || v === 'program_lead_title') initFields[v] = 'Director of Engineering';
+      else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'date' || v === 'start_date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      else if (v === 'end_date') initFields[v] = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      else if (v === 'status') initFields[v] = 'SUCCESSFULLY COMPLETED';
+      else if (v === 'compensation') initFields[v] = '$85,000 / Year';
+      else initFields[v] = '';
+    });
+    setDynamicFormFields(initFields);
+    setShowCertModal(true);
   };
 
   const messagesEndRef = useRef(null);
@@ -306,19 +337,7 @@ export default function ApplicationDetailAdminPage() {
             </span>
 
             <button
-              onClick={() => {
-                fetchPolyCertTemplates();
-                setCertForm({
-                  role_title: application?.position_title || '',
-                  duration: '6 Months',
-                  organization_name: 'Code Plus Academy',
-                  signatory: 'Dr. Alex Vance',
-                  signatory_role: 'Director of Engineering',
-                  signature_text: 'Dr. Alex Vance',
-                  template_name: 'certificate.html'
-                });
-                setShowCertModal(true);
-              }}
+              onClick={openCertIssuanceModal}
               style={{
                 padding: '10px 18px', borderRadius: '8px', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
                 color: '#ffffff', fontWeight: '700', border: 'none', cursor: 'pointer', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.35)',

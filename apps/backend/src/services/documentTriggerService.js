@@ -76,6 +76,12 @@ async function renderPolyCertTemplatePreview(templateName, templateData = {}) {
   const tplInfo = await getPolyCertTemplateHtml(templateName);
   let html = tplInfo.html_content || '';
 
+  // Default cursive SVG signature data URI for signature_image placeholder
+  const defaultSigSvg = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='60'><text x='10' y='40' font-family='cursive' font-size='24' fill='%231e3a8a'>Dr. Alex Vance</text></svg>";
+  if (!templateData.signature_image) {
+    templateData.signature_image = defaultSigSvg;
+  }
+
   // Substitute Jinja2 {{ variable }} placeholders with values
   Object.entries(templateData).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
@@ -83,6 +89,10 @@ async function renderPolyCertTemplatePreview(templateName, templateData = {}) {
       html = html.replace(pattern, String(value));
     }
   });
+
+  // Replace any remaining unreplaced {{ signature_image }} or {{ variable }} placeholders to prevent 404s
+  html = html.replace(/\{\{\s*signature_image\s*\}\}/g, defaultSigSvg);
+  html = html.replace(/\{\{\s*[\w_]+\s*\}\}/g, '');
 
   return {
     filename: tplInfo.filename,
