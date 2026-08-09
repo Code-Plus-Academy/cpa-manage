@@ -6,7 +6,7 @@ import AdminShell from '../../components/shell/AdminShell';
 import { apiFetch } from '../../lib/apiClient';
 import {
   Briefcase, Users, CheckCircle2, Clock, XCircle, Search, Filter, Plus,
-  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play, RefreshCw, FileCheck, Layers
+  Sparkles, FileText, Send, Eye, Copy, Archive, ArrowRight, ShieldCheck, Mail, BarChart3, Settings, Play, RefreshCw, FileCheck, Layers, Code, Save, Trash2, FileCode
 } from 'lucide-react';
 
 export default function HiringAdminDashboard() {
@@ -20,6 +20,15 @@ export default function HiringAdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPositionFilter, setSelectedPositionFilter] = useState('ALL');
+
+  // PolyCert Studio Synchronized Template Editor States
+  const [polyCertStudioTemplates, setPolyCertStudioTemplates] = useState([]);
+  const [activeStudioTemplate, setActiveStudioTemplate] = useState(null);
+  const [studioHtml, setStudioHtml] = useState('');
+  const [studioTplName, setStudioTplName] = useState('');
+  const [studioSaving, setStudioSaving] = useState(false);
+  const [studioDeleting, setStudioDeleting] = useState(false);
+  const [studioLoading, setStudioLoading] = useState(false);
 
   // Modal States
   const [showPosModal, setShowPosModal] = useState(false);
@@ -52,6 +61,88 @@ export default function HiringAdminDashboard() {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  useEffect(() => {
+    if (activeSubTab === 'templates') {
+      fetchPolyCertStudioTemplates();
+    }
+  }, [activeSubTab]);
+
+  const fetchPolyCertStudioTemplates = async () => {
+    try {
+      setStudioLoading(true);
+      const res = await apiFetch('/admin/hiring/polycert/templates');
+      if (res.ok) {
+        const data = await res.json();
+        const tList = data.templates || [];
+        setPolyCertStudioTemplates(tList);
+        if (tList.length > 0 && !activeStudioTemplate) {
+          loadStudioTemplate(tList[0].filename);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch PolyCert Studio templates:', err);
+    } finally {
+      setStudioLoading(false);
+    }
+  };
+
+  const loadStudioTemplate = async (filename) => {
+    try {
+      setStudioLoading(true);
+      const res = await apiFetch(`/admin/hiring/polycert/templates/${encodeURIComponent(filename)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setActiveStudioTemplate(data);
+        setStudioTplName(data.name || filename.replace('.html', ''));
+        setStudioHtml(data.html_content || '');
+      }
+    } catch (err) {
+      console.error('Failed to load PolyCert Studio template code:', err);
+    } finally {
+      setStudioLoading(false);
+    }
+  };
+
+  const handleSaveStudioTemplate = async () => {
+    if (!studioTplName || !studioHtml) return;
+    try {
+      setStudioSaving(true);
+      const res = await apiFetch('/admin/hiring/polycert/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: studioTplName, html: studioHtml }),
+      });
+      if (res.ok) {
+        alert('✨ Template successfully saved & synced with PolyCert Studio!');
+        fetchPolyCertStudioTemplates();
+      }
+    } catch (err) {
+      console.error('Failed saving PolyCert Studio template:', err);
+    } finally {
+      setStudioSaving(false);
+    }
+  };
+
+  const handleDeleteStudioTemplate = async (filename) => {
+    if (!confirm(`Are you sure you want to delete template '${filename}' from PolyCert Studio?`)) return;
+    try {
+      setStudioDeleting(true);
+      const res = await apiFetch(`/admin/hiring/polycert/templates/${encodeURIComponent(filename)}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        alert(`Template '${filename}' deleted successfully from PolyCert Studio!`);
+        setActiveStudioTemplate(null);
+        setStudioHtml('');
+        fetchPolyCertStudioTemplates();
+      }
+    } catch (err) {
+      console.error('Failed deleting PolyCert Studio template:', err);
+    } finally {
+      setStudioDeleting(false);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -527,42 +618,204 @@ export default function HiringAdminDashboard() {
           </div>
         )}
 
-        {/* MODULE 6: DOCUMENT TEMPLATES & VERSIONING */}
+        {/* MODULE 6: POLYCERT STUDIO SYNCHRONIZED TEMPLATE EDITOR */}
         {activeSubTab === 'templates' && (
-          <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ background: 'rgba(10, 11, 16, 0.8)', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', color: '#9ca3af' }}>
-                  <th style={{ padding: '12px 16px' }}>TEMPLATE NAME</th>
-                  <th style={{ padding: '12px 16px' }}>TYPE</th>
-                  <th style={{ padding: '12px 16px' }}>VERSION</th>
-                  <th style={{ padding: '12px 16px' }}>ACTIVE STATUS</th>
-                  <th style={{ padding: '12px 16px' }}>LAST UPDATED</th>
-                  <th style={{ padding: '12px 16px' }}>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {templates.map((t) => (
-                  <tr key={t.id} style={{ borderBottom: '1px solid rgba(255, 255, 255, 0.05)' }}>
-                    <td style={{ padding: '14px 16px', fontWeight: '700', color: '#ffffff' }}>{t.title}</td>
-                    <td style={{ padding: '14px 16px', textTransform: 'capitalize', color: '#9ca3af' }}>{t.type}</td>
-                    <td style={{ padding: '14px 16px' }}><span style={{ padding: '2px 8px', borderRadius: '4px', background: 'rgba(255,255,255,0.08)', fontSize: '11px', fontWeight: '700' }}>v{t.version || 1}</span></td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700', background: t.is_active ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)', color: t.is_active ? '#34d399' : '#f87171' }}>
-                        {t.is_active ? 'Active' : 'Draft / Inactive'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px', color: '#9ca3af' }}>{new Date(t.updated_at || t.created_at).toLocaleDateString()}</td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button onClick={() => { setEditingTpl(t); setTplForm(t); setShowTplModal(true); }} style={{ background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer' }} title="Edit"><FileText size={16} /></button>
-                        <button onClick={() => handlePreviewTemplate(t.id)} style={{ background: 'none', border: 'none', color: '#34d399', cursor: 'pointer' }} title="Preview HTML"><Eye size={16} /></button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Top Info & Sync Banner */}
+            <div style={{ background: 'rgba(18, 20, 29, 0.8)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '12px', padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <Code style={{ color: '#818cf8' }} size={22} /> PolyCert Studio Synchronized Template Editor
+                </h2>
+                <p style={{ fontSize: '13px', color: '#9ca3af', margin: '4px 0 0 0' }}>
+                  Live Jinja2 template management synchronized directly with PolyCert Studio API backend (<code style={{ color: '#818cf8' }}>https://certification-bacnkend.onrender.com</code>).
+                </p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={() => {
+                    const newName = prompt('Enter name for new template (e.g. internship_certificate):');
+                    if (newName) {
+                      const filename = newName.toLowerCase().endsWith('.html') ? newName.toLowerCase() : `${newName.toLowerCase().replace(/\s+/g, '_')}.html`;
+                      setStudioTplName(newName);
+                      setActiveStudioTemplate({ filename, name: newName, is_custom: true });
+                      setStudioHtml(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title | default('Certificate of Completion') }}</title>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #fff; color: #111; padding: 40px; text-align: center; }
+        .cert-title { font-size: 32px; font-weight: bold; color: #1e3a8a; margin-bottom: 20px; }
+        .recipient { font-size: 24px; font-weight: bold; color: #2563eb; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="cert-title">CERTIFICATE OF COMPLETION</div>
+    <p>This is to certify that</p>
+    <div class="recipient">{{ name }}</div>
+    <p>has successfully completed the program for <strong>{{ role }}</strong> at {{ organization_name }}.</p>
+    <p>Date: {{ date }} | Serial: {{ serial_no }}</p>
+</body>
+</html>`);
+                    }
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: 'linear-gradient(90deg, #6366f1, #4f46e5)', color: '#fff', border: 'none', fontSize: '13px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}
+                >
+                  <Plus size={15} /> Create New Template
+                </button>
+                <button
+                  onClick={fetchPolyCertStudioTemplates}
+                  disabled={studioLoading}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.12)', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  <RefreshCw size={15} className={studioLoading ? 'animate-spin' : ''} /> Sync Templates
+                </button>
+              </div>
+            </div>
+
+            {/* Split 2-Column Editor Workspace */}
+            <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '20px' }}>
+              {/* Left Sidebar: Installed PolyCert Templates List */}
+              <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <FileCode size={15} style={{ color: '#818cf8' }} /> Installed Templates ({polyCertStudioTemplates.length})
+                </h3>
+
+                {studioLoading && polyCertStudioTemplates.length === 0 ? (
+                  <div style={{ fontSize: '13px', color: '#9ca3af', padding: '20px 0', textAlign: 'center' }}>Loading PolyCert templates...</div>
+                ) : (
+                  polyCertStudioTemplates.map((t) => {
+                    const isSelected = activeStudioTemplate?.filename === t.filename;
+                    return (
+                      <div
+                        key={t.filename}
+                        onClick={() => loadStudioTemplate(t.filename)}
+                        style={{
+                          padding: '12px', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s',
+                          background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.03)',
+                          border: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.06)'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '14px', fontWeight: '700', color: isSelected ? '#818cf8' : '#ffffff' }}>
+                            {t.name || t.filename}
+                          </span>
+                          {t.is_custom ? (
+                            <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Custom</span>
+                          ) : (
+                            <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Built-in</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{t.filename}</div>
+
+                        {/* Detected Variable Badges */}
+                        {t.variables && t.variables.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                            {t.variables.slice(0, 4).map(v => (
+                              <span key={v} style={{ fontSize: '9px', background: 'rgba(255,255,255,0.06)', color: '#a5b4fc', padding: '1px 5px', borderRadius: '3px', fontFamily: 'monospace' }}>
+                                {`{{ ${v} }}`}
+                              </span>
+                            ))}
+                            {t.variables.length > 4 && (
+                              <span style={{ fontSize: '9px', color: '#6b7280' }}>+{t.variables.length - 4} more</span>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Right Column: Code Editor & Live Preview Split */}
+              <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {activeStudioTemplate ? (
+                  <>
+                    {/* Action Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div>
+                          <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '2px' }}>Template Display Name</label>
+                          <input
+                            type="text"
+                            value={studioTplName}
+                            onChange={(e) => setStudioTplName(e.target.value)}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.15)', background: '#0a0b10', color: '#fff', fontSize: '14px', fontWeight: '700' }}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block' }}>Filename</span>
+                          <code style={{ fontSize: '13px', color: '#818cf8', background: 'rgba(99, 102, 241, 0.15)', padding: '4px 8px', borderRadius: '4px' }}>
+                            {activeStudioTemplate.filename}
+                          </code>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {activeStudioTemplate.is_custom && (
+                          <button
+                            onClick={() => handleDeleteStudioTemplate(activeStudioTemplate.filename)}
+                            disabled={studioDeleting}
+                            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={15} /> {studioDeleting ? 'Deleting...' : 'Delete Template'}
+                          </button>
+                        )}
+                        <button
+                          onClick={handleSaveStudioTemplate}
+                          disabled={studioSaving}
+                          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '6px', background: 'linear-gradient(90deg, #10b981, #059669)', color: '#fff', border: 'none', fontSize: '13px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' }}
+                        >
+                          <Save size={15} /> {studioSaving ? 'Saving to PolyCert Studio...' : 'Save & Sync to PolyCert'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Editor & Live Split View */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', height: '520px' }}>
+                      {/* HTML/Jinja2 Code Editor */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <Code size={14} /> Jinja2 HTML Template Source Code
+                          </span>
+                        </div>
+                        <textarea
+                          value={studioHtml}
+                          onChange={(e) => setStudioHtml(e.target.value)}
+                          placeholder="Enter Jinja2 HTML code here..."
+                          style={{
+                            width: '100%', height: '100%', padding: '14px', borderRadius: '8px',
+                            border: '1px solid rgba(255,255,255,0.15)', background: '#0a0d14', color: '#f1f5f9',
+                            fontFamily: 'Consolas, Monaco, "Andale Mono", monospace', fontSize: '13px', lineHeight: '1.5',
+                            resize: 'none', outline: 'none'
+                          }}
+                        />
+                      </div>
+
+                      {/* Real-time HTML Preview */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: '#10b981', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Eye size={14} /> Split Live HTML Render Preview
+                        </span>
+                        <div style={{ width: '100%', height: '100%', background: '#ffffff', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)', overflow: 'hidden', padding: '4px' }}>
+                          <iframe
+                            srcDoc={studioHtml.replace(/\{\{\s*name\s*\}\}/g, 'John Doe').replace(/\{\{\s*role\s*\}\}/g, 'Senior Software Engineer').replace(/\{\{\s*organization_name\s*\}\}/g, 'Code Plus Academy').replace(/\{\{\s*date\s*\}\}/g, 'August 10, 2026').replace(/\{\{\s*serial_no\s*\}\}/g, 'CERT-2026-PREVIEW')}
+                            title="Split Live Template Preview"
+                            style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ padding: '60px', textAlign: 'center', color: '#9ca3af' }}>
+                    Select a template from the left sidebar to start editing or click <strong>"Create New Template"</strong>.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

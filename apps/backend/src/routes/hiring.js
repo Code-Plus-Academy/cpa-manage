@@ -596,11 +596,47 @@ router.get('/polycert/templates', async (req, res, next) => {
   }
 });
 
+// GET /polycert/templates/:filename — Fetch raw HTML & Jinja2 placeholders for a template
+router.get('/polycert/templates/:filename', async (req, res, next) => {
+  try {
+    const { filename } = req.params;
+    const templateData = await documentTriggerService.getPolyCertTemplateHtml(filename);
+    res.json(templateData);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /polycert/templates — Create or update custom Jinja2 template on PolyCert Studio
+router.post('/polycert/templates', async (req, res, next) => {
+  try {
+    const { name, html } = req.body;
+    if (!name || !html) {
+      return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Both name and html are required' } });
+    }
+    const result = await documentTriggerService.savePolyCertTemplate(name, html);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /polycert/templates/:filename — Delete custom template from PolyCert Studio
+router.delete('/polycert/templates/:filename', async (req, res, next) => {
+  try {
+    const { filename } = req.params;
+    const result = await documentTriggerService.deletePolyCertTemplate(filename);
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /applications/:id/issue-certificate-preview — Fetch Jinja2 template from PolyCert Studio API & render HTML preview
 router.post('/applications/:id/issue-certificate-preview', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name } = req.body;
+    const { template_name, data: providedData } = req.body;
 
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
@@ -616,23 +652,25 @@ router.post('/applications/:id/issue-certificate-preview', async (req, res, next
     }
 
     const app = appRes.rows[0];
-    const targetTemplate = template_name || 'certificate.html';
+    const targetTemplate = template_name || req.body.template_name || 'certificate.html';
     const previewSerial = `CERT-${new Date().getFullYear()}-PREVIEW`;
+    const formFields = providedData || req.body || {};
 
     const templateData = {
       name: app.candidate_name,
-      role: role_title || app.position_title,
-      organization_name: organization_name || 'Code Plus Academy',
-      company_name: organization_name || 'Code+ Academy',
+      role: formFields.role || formFields.role_title || app.position_title,
+      organization_name: formFields.organization_name || 'Code Plus Academy',
+      company_name: formFields.company_name || formFields.organization_name || 'Code+ Academy',
       holding_company: 'Code Plus Education',
       serial_no: previewSerial,
-      date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-      duration: duration || '6 Months',
-      signatory: signatory || 'Dr. Alex Vance',
-      signatory_role: signatory_role || 'Director of Engineering',
-      signature_text: signature_text || signatory || 'Dr. Alex Vance',
+      date: formFields.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+      duration: formFields.duration || '6 Months',
+      signatory: formFields.signatory || 'Dr. Alex Vance',
+      signatory_role: formFields.signatory_role || 'Director of Engineering',
+      signature_text: formFields.signature_text || formFields.signatory || 'Dr. Alex Vance',
       doc_tag: 'OFFICIAL CERTIFICATE',
-      eyebrow: 'CODE PLUS ACADEMY CREDENTIAL'
+      eyebrow: 'CODE PLUS ACADEMY CREDENTIAL',
+      ...formFields
     };
 
     const previewResult = await documentTriggerService.renderPolyCertTemplatePreview(targetTemplate, templateData);
@@ -653,7 +691,8 @@ router.post('/applications/:id/issue-certificate-preview', async (req, res, next
 router.post('/applications/:id/issue-certificate-confirm', async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name } = req.body;
+    const { template_name, data: providedData } = req.body;
+    const formFields = providedData || req.body || {};
 
     const appRes = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, p.title AS position_title
@@ -669,35 +708,42 @@ router.post('/applications/:id/issue-certificate-confirm', async (req, res, next
     }
 
     const app = appRes.rows[0];
-    const serialNumber = await generateSequentialSerialNumber('CERT');
+    const targetTemplate = template_name || req.body.template_name || 'certificate.html';
+    const isOffer = targetTemplate.includes('offer');
+    const serialPrefix = isOffer ? 'OFFER' : 'CERT';
+    const serialNumber = await generateSequentialSerialNumber(serialPrefix);
     const verificationCode = crypto.randomBytes(8).toString('hex').toUpperCase();
+
+    const docType = isOffer ? 'offer_letter' : 'certificate';
 
     // Log document in hiring_generated_documents
     const docRes = await query(
       `INSERT INTO hiring_generated_documents (
         application_id, document_type, rendered_html, serial_number, verification_code, document_version, variables_used, sent_to
-       ) VALUES ($1, 'certificate', $2, $3, $4, 1, $5, $6)
+       ) VALUES ($1, $2, $3, $4, $5, 1, $6, $7)
        RETURNING *`,
       [
         id,
-        `<div>Certificate HTML for ${app.candidate_name} (${serialNumber})</div>`,
+        docType,
+        `<div>Generated ${docType} for ${app.candidate_name} (${serialNumber})</div>`,
         serialNumber,
         verificationCode,
-        JSON.stringify({ role_title, duration, organization_name, signatory, signatory_role, signature_text, template_name }),
+        JSON.stringify(formFields),
         app.candidate_email || 'candidate@example.com'
       ]
     );
 
     const docTriggerStatus = await documentTriggerService.triggerDocumentGeneration(id, {
-      document_type: 'certificate',
-      template_name: template_name || 'certificate.html',
-      role: role_title || app.position_title,
+      document_type: docType,
+      template_name: targetTemplate,
       serial_number: serialNumber,
-      duration,
-      organization_name,
-      signatory,
-      signatory_role,
-      signature_text
+      role: formFields.role || formFields.role_title || app.position_title,
+      duration: formFields.duration,
+      organization_name: formFields.organization_name,
+      signatory: formFields.signatory,
+      signatory_role: formFields.signatory_role,
+      signature_text: formFields.signature_text,
+      ...formFields
     });
 
     notificationService.notifyCandidateStatusChange(id, 'certificate_issued');

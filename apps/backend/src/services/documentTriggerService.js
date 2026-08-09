@@ -177,9 +177,58 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
   }
 }
 
+/**
+ * Create or update a custom Jinja2 HTML template on PolyCert Studio.
+ */
+async function savePolyCertTemplate(name, html) {
+  try {
+    const response = await polyCertFetch('/api/templates', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, html })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`PolyCert API returned status ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error(`[DocumentTrigger] Failed to save PolyCert template '${name}': ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Delete a custom template from PolyCert Studio.
+ */
+async function deletePolyCertTemplate(filename) {
+  try {
+    const response = await polyCertFetch(`/api/templates/${encodeURIComponent(filename)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`PolyCert API returned status ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error(`[DocumentTrigger] Failed to delete PolyCert template '${filename}': ${err.message}`);
+    throw err;
+  }
+}
+
 module.exports = {
   fetchPolyCertTemplates,
   getPolyCertTemplateHtml,
   renderPolyCertTemplatePreview,
-  triggerDocumentGeneration
+  triggerDocumentGeneration,
+  savePolyCertTemplate,
+  deletePolyCertTemplate
 };

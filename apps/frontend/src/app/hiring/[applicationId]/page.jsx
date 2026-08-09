@@ -7,7 +7,7 @@ import AdminShell from '../../../components/shell/AdminShell';
 import { apiFetch } from '../../../lib/apiClient';
 import {
   ArrowLeft, MessageSquare, Send, CheckCircle2, Clock, XCircle, AlertCircle,
-  FileText, Sparkles, User, ShieldCheck, Plus, Check, Award
+  FileText, Sparkles, User, ShieldCheck, Plus, Check, Award, Maximize2, ZoomIn, ZoomOut, Minimize2
 } from 'lucide-react';
 
 export default function ApplicationDetailAdminPage() {
@@ -34,18 +34,15 @@ export default function ApplicationDetailAdminPage() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [approving, setApproving] = useState(false);
 
-  // Certificate Generation Preview Modal
+  // Certificate / Document Generation Preview Modal
   const [showCertModal, setShowCertModal] = useState(false);
+  const [showFullscreenPreview, setShowFullscreenPreview] = useState(false);
+  const [previewZoom, setPreviewZoom] = useState(1);
   const [availableTemplates, setAvailableTemplates] = useState([]);
-  const [certForm, setCertForm] = useState({
-    role_title: '',
-    duration: '6 Months',
-    organization_name: 'Code Plus Academy',
-    signatory: 'Dr. Alex Vance',
-    signatory_role: 'Director of Engineering',
-    signature_text: 'Dr. Alex Vance',
-    template_name: 'certificate.html'
-  });
+  const [selectedTemplateFile, setSelectedTemplateFile] = useState('certificate.html');
+  const [detectedVariables, setDetectedVariables] = useState([]);
+  const [dynamicFormFields, setDynamicFormFields] = useState({});
+
   const [certPreviewHtml, setCertPreviewHtml] = useState('');
   const [certPreviewLoading, setCertPreviewLoading] = useState(false);
   const [issuingCert, setIssuingCert] = useState(false);
@@ -231,17 +228,23 @@ export default function ApplicationDetailAdminPage() {
   };
 
   const handlePreviewCert = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     try {
       setCertPreviewLoading(true);
       const res = await apiFetch(`/admin/hiring/applications/${applicationId}/issue-certificate-preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(certForm),
+        body: JSON.stringify({
+          template_name: selectedTemplateFile,
+          data: dynamicFormFields
+        }),
       });
       if (res.ok) {
         const data = await res.json();
         setCertPreviewHtml(data.preview_html);
+        if (data.variables_detected && data.variables_detected.length > 0) {
+          setDetectedVariables(data.variables_detected);
+        }
       }
     } catch (err) {
       console.error('Failed certificate preview:', err);
@@ -256,7 +259,10 @@ export default function ApplicationDetailAdminPage() {
       const res = await apiFetch(`/admin/hiring/applications/${applicationId}/issue-certificate-confirm`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(certForm),
+        body: JSON.stringify({
+          template_name: selectedTemplateFile,
+          data: dynamicFormFields
+        }),
       });
       if (res.ok) {
         setShowCertModal(false);
@@ -521,96 +527,189 @@ export default function ApplicationDetailAdminPage() {
             </div>
           </div>
         )}
-        {/* Certificate Generation Modal with Live HTML Preview */}
+        {/* Certificate / Document Generation Modal with Live HTML Preview & Fullscreen Pop-up */}
         {showCertModal && (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '24px', width: '90%', maxWidth: '720px', maxHeight: '90vh', overflowY: 'auto' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '16px', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Award style={{ color: '#818cf8' }} size={22} /> Issue &amp; Generate Certificate of Completion
-              </h2>
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(12px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+            <div style={{ background: '#12141d', border: '1px solid rgba(255,255,255,0.12)', borderRadius: '16px', padding: '24px', width: '92%', maxWidth: '840px', maxHeight: '92vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: '800', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                  <Award style={{ color: '#818cf8' }} size={22} /> Issue Document &amp; Certificate (PolyCert Studio)
+                </h2>
+                <span style={{ fontSize: '12px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '4px 10px', borderRadius: '12px', fontWeight: '600', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                  Dynamic Jinja2 Template Engine
+                </span>
+              </div>
 
-              <form onSubmit={handlePreviewCert} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Certificate Role / Title</label>
-                    <input type="text" value={certForm.role_title} onChange={(e) => setCertForm({ ...certForm, role_title: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+              <form onSubmit={handlePreviewCert} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+                {/* STEP 1: Select PolyCert Template */}
+                <div style={{ background: 'rgba(255,255,255,0.03)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'block' }}>
+                    1. Select PolyCert Studio Template
+                  </label>
+                  <select
+                    value={selectedTemplateFile}
+                    onChange={(e) => {
+                      const newFile = e.target.value;
+                      setSelectedTemplateFile(newFile);
+                      const tObj = availableTemplates.find(t => t.filename === newFile);
+                      const vars = tObj?.variables || ['name', 'role', 'organization_name', 'duration', 'date', 'signatory', 'signatory_role', 'signature_text'];
+                      setDetectedVariables(vars);
+                      
+                      // Auto-initialize default values for variables
+                      const initFields = {};
+                      vars.forEach(v => {
+                        if (v === 'name') initFields[v] = application?.candidate_name || '';
+                        else if (v === 'role' || v === 'role_title') initFields[v] = application?.position_title || 'Software Developer';
+                        else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
+                        else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
+                        else if (v === 'duration') initFields[v] = '6 Months';
+                        else if (v === 'signatory' || v === 'program_lead') initFields[v] = 'Dr. Alex Vance';
+                        else if (v === 'signatory_role' || v === 'signatory_title' || v === 'program_lead_title') initFields[v] = 'Director of Engineering';
+                        else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
+                        else if (v === 'date' || v === 'start_date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                        else if (v === 'end_date') initFields[v] = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                        else if (v === 'status') initFields[v] = 'SUCCESSFULLY COMPLETED';
+                        else if (v === 'compensation') initFields[v] = '$85,000 / Year';
+                        else initFields[v] = '';
+                      });
+                      setDynamicFormFields(initFields);
+                    }}
+                    required
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.15)', background: '#0a0b10', color: '#fff', fontSize: '14px', fontWeight: '600' }}
+                  >
+                    {availableTemplates.length > 0 ? (
+                      availableTemplates.map((t) => (
+                        <option key={t.filename} value={t.filename}>
+                          📄 {t.name || t.filename} ({t.filename}) {t.is_custom ? '— Custom Template' : ''}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="certificate.html">📄 Certificate (certificate.html)</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* STEP 2: Dynamic Jinja2 Placeholders Form */}
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: '#10b981', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      2. Template Fields &amp; Jinja2 Placeholders ({detectedVariables.length > 0 ? detectedVariables.length : 8} Detected)
+                    </label>
                   </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Program Duration</label>
-                    <input type="text" placeholder="e.g. 6 Months / 120 Hours" value={certForm.duration} onChange={(e) => setCertForm({ ...certForm, duration: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    {(detectedVariables.length > 0 ? detectedVariables : ['name', 'role', 'organization_name', 'duration', 'date', 'signatory', 'signatory_role', 'signature_text']).map((varName) => {
+                      if (varName === 'serial_no' || varName === 'signature_image') return null; // Auto-generated
+                      const fieldLabel = varName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+                      return (
+                        <div key={varName}>
+                          <label style={{ fontSize: '11px', color: '#9ca3af', display: 'flex', gap: '4px', alignItems: 'center', marginBottom: '4px' }}>
+                            <span>{fieldLabel}</span>
+                            <span style={{ fontSize: '10px', color: '#6366f1', fontFamily: 'monospace' }}>({`{{ ${varName} }}`})</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={dynamicFormFields[varName] !== undefined ? dynamicFormFields[varName] : ''}
+                            onChange={(e) => setDynamicFormFields({ ...dynamicFormFields, [varName]: e.target.value })}
+                            placeholder={`Enter ${fieldLabel}...`}
+                            style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff', fontSize: '13px' }}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Organization Name</label>
-                    <input type="text" value={certForm.organization_name} onChange={(e) => setCertForm({ ...certForm, organization_name: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>PolyCert Studio Jinja2 Template</label>
-                    <select
-                      value={certForm.template_name}
-                      onChange={(e) => setCertForm({ ...certForm, template_name: e.target.value })}
-                      required
-                      style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}
-                    >
-                      {availableTemplates.length > 0 ? (
-                        availableTemplates.map((t) => (
-                          <option key={t.filename} value={t.filename}>
-                            {t.name || t.filename} ({t.filename})
-                          </option>
-                        ))
-                      ) : (
-                        <option value="certificate.html">Certificate (certificate.html)</option>
-                      )}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Signatory Name</label>
-                    <input type="text" value={certForm.signatory} onChange={(e) => setCertForm({ ...certForm, signatory: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Signatory Role</label>
-                    <input type="text" value={certForm.signatory_role} onChange={(e) => setCertForm({ ...certForm, signatory_role: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: '12px', color: '#9ca3af' }}>Cursive Signature Text</label>
-                    <input type="text" value={certForm.signature_text} onChange={(e) => setCertForm({ ...certForm, signature_text: e.target.value })} required style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
-                  </div>
-                </div>
-
-                <button type="submit" disabled={certPreviewLoading} style={{ padding: '10px', borderRadius: '6px', background: '#6366f1', color: '#fff', border: 'none', fontWeight: '600', cursor: 'pointer' }}>
-                  {certPreviewLoading ? 'Fetching Jinja2 Template from PolyCert Studio...' : 'Preview Jinja2 Certificate HTML'}
+                <button type="submit" disabled={certPreviewLoading} style={{ padding: '12px', borderRadius: '8px', background: 'linear-gradient(90deg, #6366f1, #4f46e5)', color: '#fff', border: 'none', fontWeight: '700', cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)' }}>
+                  {certPreviewLoading ? 'Fetching Jinja2 Template & Rendering Preview...' : '✨ Render & Preview Jinja2 Document'}
                 </button>
               </form>
 
+              {/* Rendered Preview Bar & Interactive Controls */}
               {certPreviewHtml && (
-                <div style={{ background: '#ffffff', borderRadius: '8px', marginBottom: '20px', padding: '4px', border: '1px solid rgba(255,255,255,0.2)' }}>
-                  <iframe
-                    srcDoc={certPreviewHtml}
-                    title="PolyCert Certificate Preview"
-                    style={{ width: '100%', height: '320px', border: 'none', borderRadius: '6px', background: '#ffffff' }}
-                  />
+                <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '10px', marginBottom: '20px', padding: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      👁️ Live Rendered Preview ({selectedTemplateFile})
+                    </span>
+                    <button
+                      onClick={() => setShowFullscreenPreview(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.4)', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                    >
+                      <Maximize2 size={14} /> Open Fullscreen Pop-up Preview
+                    </button>
+                  </div>
+
+                  <div style={{ background: '#ffffff', borderRadius: '8px', padding: '4px', overflow: 'hidden', height: '360px' }}>
+                    <iframe
+                      srcDoc={certPreviewHtml}
+                      title="PolyCert Document Preview"
+                      style={{ width: '100%', height: '100%', border: 'none', borderRadius: '6px', background: '#ffffff' }}
+                    />
+                  </div>
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: '12px' }}>
-                <button onClick={() => setShowCertModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>
+                <button onClick={() => setShowCertModal(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer', fontWeight: '600' }}>
                   Cancel
                 </button>
                 <button
                   onClick={handleConfirmIssueCert}
                   disabled={issuingCert || !certPreviewHtml}
                   style={{
-                    flex: 1, padding: '10px', borderRadius: '6px', border: 'none',
-                    background: issuingCert ? '#9ca3af' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff', fontWeight: '700', cursor: 'pointer'
+                    flex: 1.5, padding: '12px', borderRadius: '8px', border: 'none',
+                    background: issuingCert ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: '#fff', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
                   }}
                 >
-                  {issuingCert ? 'Generating & Dispatching Certificate...' : 'Confirm & Issue Certificate'}
+                  {issuingCert ? 'Generating & Dispatching Document...' : '🚀 Confirm & Issue Document'}
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* FULL-SCREEN ADAPTIVE POP-UP PREVIEW MODAL */}
+        {showFullscreenPreview && certPreviewHtml && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(16px)', zIndex: 200, display: 'flex', flexDirection: 'column' }}>
+            {/* Top Toolbar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', background: '#12141d', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <Award style={{ color: '#818cf8' }} size={24} />
+                <span style={{ fontSize: '16px', fontWeight: '800', color: '#fff' }}>
+                  PolyCert Studio Pop-up Preview — {selectedTemplateFile}
+                </span>
+              </div>
+
+              {/* Zoom & Viewport Controls */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button onClick={() => setPreviewZoom(prev => Math.max(0.5, prev - 0.15))} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ZoomOut size={16} /> Zoom Out
+                </button>
+                <span style={{ fontSize: '13px', fontWeight: '700', color: '#818cf8', width: '50px', textAlign: 'center' }}>
+                  {Math.round(previewZoom * 100)}%
+                </span>
+                <button onClick={() => setPreviewZoom(prev => Math.min(2.0, prev + 0.15))} style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <ZoomIn size={16} /> Zoom In
+                </button>
+                <button onClick={() => setPreviewZoom(1.0)} style={{ padding: '8px 12px', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: '700' }}>
+                  Fit Width
+                </button>
+
+                <button onClick={() => setShowFullscreenPreview(false)} style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '700', marginLeft: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Minimize2 size={16} /> Close Pop-up
+                </button>
+              </div>
+            </div>
+
+            {/* Adaptive Content Area */}
+            <div style={{ flex: 1, padding: '24px', overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0a0b10' }}>
+              <div style={{ width: '100%', height: '100%', maxWidth: '1200px', background: '#ffffff', borderRadius: '12px', boxShadow: '0 25px 60px rgba(0,0,0,0.8)', overflow: 'hidden', transform: `scale(${previewZoom})`, transformOrigin: 'top center', transition: 'transform 0.2s ease-in-out' }}>
+                <iframe
+                  srcDoc={certPreviewHtml}
+                  title="PolyCert Fullscreen Pop-up Preview"
+                  style={{ width: '100%', height: '100%', minHeight: '750px', border: 'none', background: '#ffffff' }}
+                />
               </div>
             </div>
           </div>
