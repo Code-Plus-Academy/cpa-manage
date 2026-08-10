@@ -282,10 +282,29 @@ router.patch(
 
       await client.query('COMMIT');
 
-      // gRPC content status update with HTTP fallback if content removal approved
+      // Direct DB update + gRPC/HTTP fallback if content removal approved
       const target = resolveTicketTarget(ticket);
       if (['remove_content', 'approve_claim', 'temporary_takedown'].includes(action_type) && target.content_id && target.content_type) {
         const newStatusPayload = 'removed';
+        const cid = String(target.content_id).trim();
+
+        // 1. Direct Database Update (instant, reliable execution without network dependence)
+        try {
+          const directQueries = [
+            `UPDATE posts SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE notes SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE articles SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE feed_videos SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1`,
+          ];
+          for (const q of directQueries) {
+            await query(q, [cid]).catch(() => {});
+          }
+          console.info(`[cases.js Direct DB Update] Updated moderation status to 'removed' for ${target.content_type} (${cid})`);
+        } catch (dbErr) {
+          console.warn('[cases.js Direct DB Update warning]:', dbErr.message);
+        }
+
+        // 2. gRPC / HTTP notification to main backend (for Redis cache purging & search index removal)
         let setStatusOk = false;
 
         try {
