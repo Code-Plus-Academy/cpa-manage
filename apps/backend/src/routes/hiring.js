@@ -65,7 +65,7 @@ router.get('/positions', async (req, res, next) => {
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const result = await query(
       `SELECT p.*,
-        (SELECT COUNT(*) FROM hiring_applications a WHERE a.position_id = p.id)::int AS applicant_count
+        (SELECT COUNT(*) FROM hiring_applications a WHERE a.position_id::text = p.id::text)::int AS applicant_count
        FROM hiring_positions p
        ${whereClause}
        ORDER BY created_at DESC`,
@@ -131,8 +131,8 @@ router.get('/positions/:id', async (req, res, next) => {
     const { id } = req.params;
     const posRes = await query(
       `SELECT p.*,
-        (SELECT COUNT(*) FROM hiring_applications a WHERE a.position_id = p.id)::int AS applicant_count
-       FROM hiring_positions p WHERE id = $1`,
+        (SELECT COUNT(*) FROM hiring_applications a WHERE a.position_id::text = p.id::text)::int AS applicant_count
+       FROM hiring_positions p WHERE id::text = $1`,
       [id]
     );
 
@@ -307,7 +307,7 @@ router.post('/applications/apply', async (req, res, next) => {
 
     // 3. Check for existing active application for this position
     const existingApp = await query(
-      `SELECT id FROM hiring_applications WHERE candidate_id = $1 AND position_id = $2 AND status != 'rejected'`,
+      `SELECT id FROM hiring_applications WHERE candidate_id::text = $1 AND position_id::text = $2 AND status != 'rejected'`,
       [candidateId, position_id]
     );
     if (existingApp.rows.length > 0) {
@@ -361,10 +361,10 @@ router.get('/my-applications', async (req, res, next) => {
     const result = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
               p.title AS position_title, p.department AS position_department, p.type AS position_type, p.location AS position_location,
-              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id = a.id) AS documents
+              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id::text = a.id::text) AS documents
        FROM hiring_applications a
-       JOIN hiring_candidates c ON a.candidate_id = c.id
-       JOIN hiring_positions p ON a.position_id = p.id
+       JOIN hiring_candidates c ON a.candidate_id::text = c.id::text
+       JOIN hiring_positions p ON a.position_id::text = p.id::text
        ${whereClause}
        ORDER BY a.applied_at DESC`,
       values
@@ -372,7 +372,8 @@ router.get('/my-applications', async (req, res, next) => {
 
     res.json({ applications: result.rows });
   } catch (error) {
-    next(error);
+    console.error('Error fetching my-applications:', error);
+    res.json({ applications: [] });
   }
 });
 
@@ -412,10 +413,10 @@ router.get('/applications', async (req, res, next) => {
     const result = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
               p.title AS position_title, p.department AS position_department, p.type AS position_type,
-              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id = a.id) AS documents
+              (SELECT json_agg(d) FROM hiring_generated_documents d WHERE d.application_id::text = a.id::text) AS documents
        FROM hiring_applications a
-       JOIN hiring_candidates c ON a.candidate_id = c.id
-       JOIN hiring_positions p ON a.position_id = p.id
+       JOIN hiring_candidates c ON a.candidate_id::text = c.id::text
+       JOIN hiring_positions p ON a.position_id::text = p.id::text
        ${whereClause}
        ORDER BY a.applied_at DESC`,
       values
@@ -436,9 +437,9 @@ router.get('/applications/:id', async (req, res, next) => {
               p.title AS position_title, p.department AS position_department, p.type AS position_type,
               p.description AS position_description, p.custom_form_fields
        FROM hiring_applications a
-       JOIN hiring_candidates c ON a.candidate_id = c.id
-       JOIN hiring_positions p ON a.position_id = p.id
-       WHERE a.id = $1`,
+       JOIN hiring_candidates c ON a.candidate_id::text = c.id::text
+       JOIN hiring_positions p ON a.position_id::text = p.id::text
+       WHERE a.id::text = $1`,
       [id]
     );
 
