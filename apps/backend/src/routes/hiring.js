@@ -21,6 +21,15 @@ async function generateSequentialSerialNumber(docType = 'OFFER') {
   return `${docType.toUpperCase()}-${year}-${paddedCounter}`;
 }
 
+// Helper: normalize status — some rows may have integer status (from gRPC proto enum)
+const STATUS_INT_MAP = { 0: 'draft', 1: 'draft', 2: 'upcoming', 3: 'open', 4: 'closed' };
+function normalizeStatus(val) {
+  if (typeof val === 'number' || (typeof val === 'string' && /^\d+$/.test(val))) {
+    return STATUS_INT_MAP[Number(val)] || 'draft';
+  }
+  return typeof val === 'string' ? val.toLowerCase().trim() : 'draft';
+}
+
 // ─── 1. POSITION MANAGEMENT ───────────────────────────────────────────────────
 
 // GET /positions — List positions with department, status, type, search filters
@@ -72,7 +81,12 @@ router.get('/positions', async (req, res, next) => {
       values
     );
 
-    res.json({ positions: result.rows });
+    const positions = result.rows.map(p => ({
+      ...p,
+      status: normalizeStatus(p.status)
+    }));
+
+    res.json({ positions });
   } catch (error) {
     next(error);
   }
