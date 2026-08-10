@@ -288,18 +288,24 @@ router.patch(
         const newStatusPayload = 'removed';
         const cid = String(target.content_id).trim();
 
-        // 1. Direct Database Update (instant, reliable execution without network dependence)
+        // 1. Direct Database Update (instant execution on shared DB tables)
         try {
-          const directQueries = [
-            `UPDATE posts SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE notes SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE articles SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE feed_videos SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1`,
-          ];
-          for (const q of directQueries) {
-            await query(q, [cid]).catch(() => {});
+          const cType = (target.content_type || '').toLowerCase();
+          let targetQuery = null;
+          if (cType.includes('post')) {
+            targetQuery = `UPDATE posts SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
+          } else if (cType.includes('note') || cType.includes('resource') || cType.includes('document')) {
+            targetQuery = `UPDATE notes SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
+          } else if (cType.includes('article')) {
+            targetQuery = `UPDATE articles SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
+          } else if (cType.includes('video')) {
+            targetQuery = `UPDATE feed_videos SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1`;
           }
-          console.info(`[cases.js Direct DB Update] Updated moderation status to 'removed' for ${target.content_type} (${cid})`);
+
+          if (targetQuery) {
+            await query(targetQuery, [cid]).catch(() => {});
+            console.info(`[cases.js Direct DB Update] Updated moderation status to 'removed' for ${target.content_type} (${cid})`);
+          }
         } catch (dbErr) {
           console.warn('[cases.js Direct DB Update warning]:', dbErr.message);
         }
