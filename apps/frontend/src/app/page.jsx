@@ -666,9 +666,24 @@ export default function AdminDashboard() {
                 <div>
                   <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Publisher & Creator Details</span>
                   <div style={{ fontSize: '12px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: '6px', marginTop: '4px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                    <div><strong>Publisher:</strong> {selectedItem.publisher_name || selectedItem.reporter_email || 'Creator Account'}</div>
-                    <div><strong>Email:</strong> {selectedItem.publisher_email || selectedItem.reporter_email || 'N/A'}</div>
-                    <div><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                    <div><strong>Publisher:</strong> {selectedItem.publisher_name || selectedItem.content_summary?.owner_username || 'Creator Account'}</div>
+                    <div style={{ marginTop: '2px' }}>
+                      <strong>Email:</strong>{' '}
+                      {(() => {
+                        const pEmail = selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email;
+                        if (!pEmail) return <span>N/A</span>;
+                        return (
+                          <a
+                            href={`mailto:${pEmail}`}
+                            title="Click to send direct email to publisher"
+                            style={{ color: tokens.colors.primary, textDecoration: 'underline', fontWeight: '600' }}
+                          >
+                            {pEmail} ✉️
+                          </a>
+                        );
+                      })()}
+                    </div>
+                    <div style={{ marginTop: '2px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
                   </div>
                 </div>
                 <div>

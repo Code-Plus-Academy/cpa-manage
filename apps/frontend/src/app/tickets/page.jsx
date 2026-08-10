@@ -582,9 +582,24 @@ export default function StandaloneTicketsPage() {
                       <div>
                         <strong style={{ color: tokens.colors.textMuted, display: 'block' }}>Publisher & Creator Details:</strong>
                         <div style={{ fontSize: '11px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '6px 8px', borderRadius: '6px', marginTop: '2px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
-                          <div><strong>Publisher:</strong> {selectedTicket.publisher_name || selectedTicket.reporter_email || 'Creator Account'}</div>
-                          <div><strong>Email:</strong> {selectedTicket.publisher_email || selectedTicket.reporter_email || 'N/A'}</div>
-                          <div><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                          <div><strong>Publisher:</strong> {selectedTicket.publisher_name || selectedTicket.content_summary?.owner_username || 'Creator Account'}</div>
+                          <div style={{ marginTop: '2px' }}>
+                            <strong>Email:</strong>{' '}
+                            {(() => {
+                              const pEmail = selectedTicket.publisher_email || selectedTicket.content_summary?.owner_email || selectedTicket.reporter_email;
+                              if (!pEmail) return <span>N/A</span>;
+                              return (
+                                <a
+                                  href={`mailto:${pEmail}`}
+                                  title="Click to send direct email to publisher"
+                                  style={{ color: tokens.colors.primary, textDecoration: 'underline', fontWeight: '600' }}
+                                >
+                                  {pEmail} ✉️
+                                </a>
+                              );
+                            })()}
+                          </div>
+                          <div style={{ marginTop: '2px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
                         </div>
                       </div>
                       <div><strong style={{ color: tokens.colors.textMuted }}>Submitted:</strong> {selectedTicket.created_at ? new Date(selectedTicket.created_at).toLocaleString() : 'N/A'}</div>

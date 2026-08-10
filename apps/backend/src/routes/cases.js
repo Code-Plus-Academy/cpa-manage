@@ -187,6 +187,14 @@ router.get(
             content_type: target.content_type,
             content_id: String(target.content_id),
           });
+          if (contentSummary) {
+            if (contentSummary.owner_email) {
+              ticket.publisher_email = contentSummary.owner_email;
+            }
+            if (contentSummary.owner_username) {
+              ticket.publisher_name = contentSummary.owner_username;
+            }
+          }
         } catch (grpcErr) {
           console.warn('[gRPC GetContentSummary Error]:', grpcErr.message);
         }
@@ -360,26 +368,48 @@ router.patch(
         }
       }
 
-      // Dispatch Automated Publisher Email Notification via Queue Engine
+      // Dispatch Automated Email Notifications (Publisher & Reporter)
       try {
-        const targetEmail = ticket.reporter_email || ticket.publisher_email;
-        if (targetEmail) {
-          const { enqueueTemplatedEmail } = require('../services/emailQueue');
+        const { enqueueTemplatedEmail } = require('../services/emailQueue');
+
+        // 1. Send Moderation Action Notice to Content Publisher / Creator
+        const publisherEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email);
+        const publisherName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
+
+        if (publisherEmail) {
           enqueueTemplatedEmail({
             templateKey: 'moderation_action_notice',
-            recipientEmail: targetEmail,
+            recipientEmail: publisherEmail,
             payload: {
-              name: ticket.publisher_name || 'Creator / User',
+              name: publisherName,
               ticket_id: String(ticket.id),
               action_type,
               reason,
-              content_title: ticket.content_title || 'Content Item',
+              content_title: (contentSummary && contentSummary.title) || ticket.category || 'Content Item',
+            },
+            userId: (contentSummary && contentSummary.owner_id) || null,
+          }).then(() => {
+            console.info(`[cases.js] Moderation action notice email enqueued for publisher: ${publisherEmail}`);
+          }).catch(err => console.warn('[cases.js] Moderation notice to publisher failed:', err.message));
+        }
+
+        // 2. Send Ticket Update Notice to Complainant / Reporter (if different from publisher)
+        if (ticket.reporter_email && ticket.reporter_email !== publisherEmail) {
+          enqueueTemplatedEmail({
+            templateKey: 'moderation_action_notice',
+            recipientEmail: ticket.reporter_email,
+            payload: {
+              name: 'Complainant',
+              ticket_id: String(ticket.id),
+              action_type,
+              reason,
+              content_title: (contentSummary && contentSummary.title) || ticket.category || 'Reported Item',
             },
             userId: ticket.user_id || null,
-          }).catch(err => console.warn('[cases.js] Moderation notice enqueuing failed:', err.message));
+          }).catch(err => console.warn('[cases.js] Update notice to reporter failed:', err.message));
         }
       } catch (emailErr) {
-        console.warn('[Publisher Notification Email Failed]:', emailErr.message);
+        console.warn('[Publisher/Reporter Notification Email Failed]:', emailErr.message);
       }
 
       res.json({ ticket: { ...ticket, status: newStatus }, action: actionRows[0] });

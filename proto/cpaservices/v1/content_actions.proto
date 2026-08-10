@@ -23,6 +23,7 @@ message ContentSummary {
   string owner_username = 5;
   string created_at = 6;
   string moderation_status = 7;
+  string owner_email = 8;
 }
 
 message SetContentStatusRequest {
