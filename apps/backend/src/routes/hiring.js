@@ -31,11 +31,26 @@ router.get('/positions', async (req, res, next) => {
     const values = [];
     let idx = 1;
 
-    if (status === 'public') {
-      conditions.push(`LOWER(status) != 'draft'`);
-    } else if (status) {
-      conditions.push(`LOWER(status) = LOWER($${idx++})`);
-      values.push(status);
+    const isPublicRoute = req.baseUrl.includes('/api/hiring') || !req.admin;
+
+    if (isPublicRoute) {
+      if (status === 'upcoming') {
+        conditions.push(`LOWER(status) = 'upcoming'`);
+      } else if (status === 'closed') {
+        conditions.push(`LOWER(status) IN ('closed', 'archived')`);
+      } else if (status === 'open_only') {
+        conditions.push(`LOWER(status) = 'open'`);
+      } else {
+        // By default on public routes, show all non-draft positions (open, upcoming, closed)
+        conditions.push(`LOWER(status) != 'draft'`);
+      }
+    } else {
+      if (status === 'public') {
+        conditions.push(`LOWER(status) != 'draft'`);
+      } else if (status) {
+        conditions.push(`LOWER(status) = LOWER($${idx++})`);
+        values.push(status);
+      }
     }
     if (department) {
       conditions.push(`department = $${idx++}`);

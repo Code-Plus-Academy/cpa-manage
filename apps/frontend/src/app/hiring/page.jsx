@@ -706,7 +706,11 @@ export default function HiringAdminDashboard() {
                       </span>
                     </td>
                     <td style={{ padding: '14px 16px' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700', background: p.status === 'open' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: p.status === 'open' ? '#34d399' : '#fbbf24' }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: '700',
+                        background: p.status === 'open' ? 'rgba(16, 185, 129, 0.15)' : p.status === 'upcoming' ? 'rgba(192, 132, 252, 0.15)' : p.status === 'closed' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                        color: p.status === 'open' ? '#34d399' : p.status === 'upcoming' ? '#c084fc' : p.status === 'closed' ? '#f87171' : '#fbbf24'
+                      }}>
                         {p.status}
                       </span>
                     </td>
