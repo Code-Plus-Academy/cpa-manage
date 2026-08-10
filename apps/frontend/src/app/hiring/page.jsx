@@ -1088,22 +1088,56 @@ export default function HiringAdminDashboard() {
                     </select>
                   </div>
                   <div>
-                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Status</label>
-                    <select value={posForm.status} onChange={(e) => setPosForm({ ...posForm, status: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
-                      <option value="open">Open</option>
-                      <option value="upcoming">Upcoming</option>
-                      <option value="closed">Closed</option>
-                      <option value="draft">Draft</option>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Employment Type</label>
+                    <select value={posForm.type || 'intern'} onChange={(e) => setPosForm({ ...posForm, type: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="intern">Internship (Intern)</option>
+                      <option value="full-time">Full-Time</option>
+                      <option value="part-time">Part-Time</option>
+                      <option value="contract">Contract</option>
                     </select>
                   </div>
                 </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Status</label>
+                    <select value={posForm.status} onChange={(e) => setPosForm({ ...posForm, status: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="open">Open (Actively Hiring)</option>
+                      <option value="upcoming">Upcoming (Opening Soon)</option>
+                      <option value="closed">Closed</option>
+                      <option value="draft">Draft (Hidden)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Location</label>
+                    <select value={posForm.location || 'remote'} onChange={(e) => setPosForm({ ...posForm, location: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="remote">Remote</option>
+                      <option value="hybrid">Hybrid</option>
+                      <option value="onsite">On-Site</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Openings</label>
+                    <input type="number" min="1" value={posForm.openings || 1} onChange={(e) => setPosForm({ ...posForm, openings: parseInt(e.target.value) || 1 })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Stipend / Salary Range</label>
+                  <input type="text" value={posForm.salary_range || ''} onChange={(e) => setPosForm({ ...posForm, salary_range: e.target.value })} placeholder="e.g. Unpaid / $2,000 / month stipend / $120,000 - $160,000" style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                </div>
+
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Description</label>
                   <textarea rows={3} value={posForm.description} onChange={(e) => setPosForm({ ...posForm, description: e.target.value })} required style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Role & Responsibilities</label>
-                  <textarea rows={3} value={posForm.responsibilities} onChange={(e) => setPosForm({ ...posForm, responsibilities: e.target.value })} placeholder="List key responsibilities..." style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                  <textarea rows={3} value={posForm.responsibilities || ''} onChange={(e) => setPosForm({ ...posForm, responsibilities: e.target.value })} placeholder="List key responsibilities..." style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Requirements & Qualifications</label>
+                  <textarea rows={3} value={posForm.requirements || ''} onChange={(e) => setPosForm({ ...posForm, requirements: e.target.value })} placeholder="List required skills and experience..." style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }} />
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
                   <button type="button" onClick={() => setShowPosModal(false)} style={{ flex: 1, padding: '10px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#fff', cursor: 'pointer' }}>Cancel</button>
