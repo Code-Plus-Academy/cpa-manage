@@ -25,6 +25,9 @@ export default function PublicCareersPage() {
       setLoading(true);
       let res = await fetch(`${apiUrl}/api/hiring/positions`);
       if (!res.ok) {
+        res = await fetch(`${apiUrl}/api/career/positions`);
+      }
+      if (!res.ok) {
         res = await fetch(`${apiUrl}/admin/hiring/positions`);
       }
       if (res.ok) {
