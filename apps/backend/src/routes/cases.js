@@ -291,10 +291,10 @@ router.patch(
         // 1. Direct Database Update (instant, reliable execution without network dependence)
         try {
           const directQueries = [
-            `UPDATE posts SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE notes SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE articles SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
-            `UPDATE feed_videos SET moderation_status = 'removed', status = 'archived', updated_at = NOW() WHERE id::text = $1`,
+            `UPDATE posts SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE notes SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE articles SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`,
+            `UPDATE feed_videos SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1`,
           ];
           for (const q of directQueries) {
             await query(q, [cid]).catch(() => {});
