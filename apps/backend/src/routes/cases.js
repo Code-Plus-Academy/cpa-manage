@@ -443,4 +443,113 @@ router.post('/refine-justification', async (req, res, next) => {
   }
 });
 
+// POST /admin/cases/:id/send-email — Send direct email to publisher/reporter via platform email system
+router.post(
+  '/:id/send-email',
+  requirePermission.any(['support.respond', 'email.campaign.send']),
+  async (req, res, next) => {
+    const client = await getClient();
+    try {
+      const { id } = req.params;
+      const { recipient_email, template_key, payload = {}, subject, message } = req.body;
+
+      if (!recipient_email) {
+        return next(new AppError('VALIDATION_ERROR', 400, { fields: { recipient_email: 'required' } }));
+      }
+
+      const { rows } = await query('SELECT * FROM support_tickets WHERE id::text = $1', [id]);
+      if (rows.length === 0) {
+        return next(new AppError('NOT_FOUND', 404));
+      }
+      const ticket = rows[0];
+
+      let sentOk = false;
+      let actionReason = '';
+
+      if (template_key) {
+        // Option A: Send via Email Management System (Templates & Queue Engine)
+        const { enqueueTemplatedEmail } = require('../services/emailQueue');
+        const defaultPayload = {
+          name: payload.name || ticket.publisher_name || 'Creator / User',
+          ticket_id: String(ticket.id),
+          action_type: payload.action_type || ticket.status || 'notice',
+          reason: payload.reason || message || 'Administrative Notice',
+          content_title: payload.content_title || ticket.category || 'Content Item',
+          ...payload,
+        };
+
+        const job = await enqueueTemplatedEmail({
+          templateKey: template_key,
+          recipientEmail: recipient_email,
+          payload: defaultPayload,
+          userId: ticket.user_id || null,
+        });
+
+        sentOk = !!job;
+        actionReason = `Templated Email (${template_key}) sent to ${recipient_email}`;
+      } else {
+        // Option B: Ad-hoc Custom Email Dispatch
+        if (!subject || !message) {
+          return next(new AppError('VALIDATION_ERROR', 400, {
+            fields: {
+              subject: !subject ? 'required' : undefined,
+              message: !message ? 'required' : undefined,
+            }
+          }));
+        }
+
+        const htmlBody = `
+          <div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; padding: 24px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 10px;">
+            <h2 style="color: #4f46e5; margin-top: 0; font-size: 20px;">Code+ Academy Trust & Safety Notice</h2>
+            <p>Regarding Case / Ticket <strong>#${ticket.id}</strong> (${ticket.category || 'General Inquiry'}):</p>
+            <div style="background-color: #f8fafc; padding: 16px; border-left: 4px solid #4f46e5; margin: 16px 0; border-radius: 6px; white-space: pre-wrap; font-size: 14px; color: #334155;">${message}</div>
+            <p style="font-size: 12px; color: #64748b; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 12px;">This is an official administrative email dispatched from Code+ Academy Administration.</p>
+            <p style="font-size: 13px; color: #334155; margin-bottom: 0;">Best regards,<br/><strong>Code+ Academy Support & Compliance Team</strong></p>
+          </div>
+        `;
+
+        const { sendMail } = require('../services/emailService');
+        sentOk = await sendMail({
+          to: recipient_email,
+          subject,
+          html: htmlBody,
+        });
+        actionReason = `Direct Custom Email to ${recipient_email}: "${subject}"`;
+      }
+
+      if (!sentOk) {
+        return next(new AppError('INTERNAL_ERROR', 500, null, 'Failed to send email via platform email system.'));
+      }
+
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO ticket_actions (ticket_id, admin_id, action_type, reason, issued_strike)
+         VALUES ($1, $2, 'direct_email_sent', $3, false)`,
+        [ticket.id, req.adminUser.id, actionReason]
+      );
+
+      await writeAuditLog(client, {
+        actorAdminId: req.adminUser.id,
+        actorIsRoot: req.adminUser.is_root,
+        permissionUsed: 'support.respond',
+        module: 'support',
+        action: 'cases.send_direct_email',
+        targetType: 'ticket',
+        targetId: String(ticket.id),
+        reason: `Sent direct email to ${recipient_email}`,
+        metadata: { recipient: recipient_email, subject },
+      });
+
+      await client.query('COMMIT');
+
+      res.json({ success: true, message: `Email dispatched successfully to ${recipient_email}` });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
+  }
+);
+
 module.exports = router;

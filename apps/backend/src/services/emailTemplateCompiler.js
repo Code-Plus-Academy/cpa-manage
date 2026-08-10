@@ -64,8 +64,18 @@ const DEFAULT_TEMPLATES = {
   },
   temporary_takedown_7day: {
     subject: '[Action Required] 7-Day Temporary Content Takedown Notice - Ticket #{{ticket_id}}',
-    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6;"><h2 style="color: #d97706;">Temporary Content Unlisting Notice</h2><p>Hello {{name}},</p><p>Your content <strong>"{{content_title}}"</strong> has been temporarily unlisted following a compliance report.</p><p>You have <strong>7 days</strong> (until {{deadline_date}}) to submit a counter-notice or response via your creator panel.</p><p><a href="{{appeal_link}}" style="background: #d97706; color: #fff; padding: 10px 18px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">Submit Counter Notice</a></p></div>',
-    available_placeholders: ['name', 'content_title', 'ticket_id', 'deadline_date', 'appeal_link'],
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #d97706;">Temporary Content Unlisting Notice (7-Day SLA)</h2><p>Hello {{name}},</p><p>Your content <strong>"{{content_title}}"</strong> (Case #{{ticket_id}}) has been temporarily unlisted following a compliance report.</p><div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 14px; margin: 16px 0; border-radius: 4px;"><strong>Reason for Temporary Unlisting:</strong><br/>{{reason}}</div><p>You have <strong>7 days</strong> to resolve this issue or submit a formal counter-notice through your creator panel before permanent removal is enforced.</p><p>Best regards,<br/><strong>Code+ Academy Support & Compliance Team</strong></p></div>',
+    available_placeholders: ['name', 'content_title', 'ticket_id', 'reason'],
+  },
+  permanent_takedown_notice: {
+    subject: '[Important] Permanent Content Removal Notice - Case #{{ticket_id}}',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #ef4444;">Permanent Content Takedown Notice</h2><p>Hello {{name}},</p><p>Following an administrative safety review, your content <strong>"{{content_title}}"</strong> (Case #{{ticket_id}}) has been <strong>permanently removed</strong> from Code+ Academy.</p><div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px; margin: 16px 0; border-radius: 4px;"><strong>Violation & Removal Reason:</strong><br/>{{reason}}</div><p style="font-size: 13px; color: #64748b;">Repeated community guideline violations may lead to creator monetization suspension or account termination.</p><p>Best regards,<br/><strong>Code+ Academy Trust & Safety Compliance</strong></p></div>',
+    available_placeholders: ['name', 'content_title', 'ticket_id', 'reason'],
+  },
+  copyright_infringement_notice: {
+    subject: '[Copyright / DMCA Notice] Alleged Infringement Report - Case #{{ticket_id}}',
+    html: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px;"><h2 style="color: #dc2626;">DMCA / Copyright Infringement Notice</h2><p>Hello {{name}},</p><p>Code+ Academy has received an intellectual property infringement notification regarding your content <strong>"{{content_title}}"</strong> (Case #{{ticket_id}}).</p><div style="background-color: #fef2f2; border-left: 4px solid #dc2626; padding: 14px; margin: 16px 0; border-radius: 4px;"><strong>Copyright Complaint Details & Reason:</strong><br/>{{reason}}</div><p style="font-size: 13px; color: #475569;">As a result of this claim, the reported material has been disabled. If you believe this claim is invalid or you hold full rights, you may submit a formal counter-notification under DMCA guidelines.</p><p>Best regards,<br/><strong>Code+ Academy Legal & IP Protection</strong></p></div>',
+    available_placeholders: ['name', 'content_title', 'ticket_id', 'reason'],
   },
 
   // Social & Community Activity

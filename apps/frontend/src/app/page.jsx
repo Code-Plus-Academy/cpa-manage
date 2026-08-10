@@ -69,6 +69,60 @@ export default function AdminDashboard() {
   const [deletingAdmin, setDeletingAdmin] = useState(null);
   const [deleteAdminSubmitting, setDeleteAdminSubmitting] = useState(false);
 
+  // In-App Direct Email Modal state
+  const [showDirectEmailModal, setShowDirectEmailModal] = useState(false);
+  const [directEmailRecipient, setDirectEmailRecipient] = useState('');
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState('moderation_action_notice');
+  const [directEmailSubject, setDirectEmailSubject] = useState('');
+  const [directEmailBody, setDirectEmailBody] = useState('');
+  const [directEmailSubmitting, setDirectEmailSubmitting] = useState(false);
+  const [directEmailSuccess, setDirectEmailSuccess] = useState(null);
+
+  const handleSendDirectEmail = async (e) => {
+    e.preventDefault();
+    if (!directEmailRecipient || !selectedItem) return;
+    setDirectEmailSubmitting(true);
+    try {
+      const payloadBody = selectedTemplateKey !== 'custom' ? {
+        template_key: selectedTemplateKey,
+        recipient_email: directEmailRecipient,
+        payload: {
+          name: selectedItem.publisher_name || selectedItem.content_summary?.owner_username || 'Creator / User',
+          ticket_id: String(selectedItem.id),
+          action_type: selectedItem.status || 'notice',
+          reason: directEmailBody || 'Administrative compliance review',
+          content_title: selectedItem.content_summary?.title || selectedItem.category || 'Content Item',
+        }
+      } : {
+        recipient_email: directEmailRecipient,
+        subject: directEmailSubject,
+        message: directEmailBody,
+      };
+
+      const res = await apiFetch(`/admin/cases/${selectedItem.id}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadBody),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error?.message || 'Failed to send email.');
+        return;
+      }
+      setDirectEmailSuccess(`Email dispatched successfully to ${directEmailRecipient}!`);
+      setTimeout(() => {
+        setShowDirectEmailModal(false);
+        setDirectEmailSuccess(null);
+        setDirectEmailBody('');
+        loadTabData(activeTab);
+      }, 1500);
+    } catch (err) {
+      alert('Network error sending email.');
+    } finally {
+      setDirectEmailSubmitting(false);
+    }
+  };
+
   const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
 
   const apiFetch = async (path, options = {}) => {
@@ -667,23 +721,31 @@ export default function AdminDashboard() {
                   <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Publisher & Creator Details</span>
                   <div style={{ fontSize: '12px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: '6px', marginTop: '4px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
                     <div><strong>Publisher:</strong> {selectedItem.publisher_name || selectedItem.content_summary?.owner_username || 'Creator Account'}</div>
-                    <div style={{ marginTop: '2px' }}>
-                      <strong>Email:</strong>{' '}
-                      {(() => {
-                        const pEmail = selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email;
-                        if (!pEmail) return <span>N/A</span>;
-                        return (
-                          <a
-                            href={`mailto:${pEmail}`}
-                            title="Click to send direct email to publisher"
-                            style={{ color: tokens.colors.primary, textDecoration: 'underline', fontWeight: '600' }}
-                          >
-                            {pEmail} ✉️
-                          </a>
-                        );
-                      })()}
+                    <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
+                      <div>
+                        <strong>Email:</strong>{' '}
+                        <span style={{ color: tokens.colors.textPrimary, fontWeight: '600' }}>
+                          {selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email || 'N/A'}
+                        </span>
+                      </div>
+                      {(selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email) && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const targetEmail = selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email;
+                            setDirectEmailRecipient(targetEmail);
+                            setDirectEmailSubject(`[Code+ Academy Case #${selectedItem.id}] Notice regarding content`);
+                            setDirectEmailBody(`Dear Creator,\n\nWe are writing to you regarding Case #${selectedItem.id} on Code+ Academy...\n\n`);
+                            setShowDirectEmailModal(true);
+                          }}
+                          className="btn-secondary"
+                          style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: tokens.colors.primary, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                        >
+                          <Mail size={12} /> Send In-App Email
+                        </button>
+                      )}
                     </div>
-                    <div style={{ marginTop: '2px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                    <div style={{ marginTop: '4px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
                   </div>
                 </div>
                 <div>
@@ -1344,6 +1406,102 @@ export default function AdminDashboard() {
                     {deleteAdminSubmitting ? 'Deleting...' : 'Delete Admin'}
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* DIRECT IN-APP EMAIL MODAL */}
+          {showDirectEmailModal && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+              <div style={{ maxWidth: '520px', width: '100%', backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Mail size={18} color={tokens.colors.primary} />
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>Send In-App Email via System</h3>
+                  </div>
+                  <button onClick={() => setShowDirectEmailModal(false)} style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer' }}><X size={18} /></button>
+                </div>
+
+                {directEmailSuccess ? (
+                  <div style={{ padding: '16px', backgroundColor: 'rgba(52, 211, 153, 0.1)', border: '1px solid #34d399', borderRadius: '8px', color: '#34d399', textAlign: 'center', fontWeight: '600' }}>
+                    <CheckCircle2 size={24} style={{ marginBottom: '8px', margin: '0 auto', display: 'block' }} />
+                    {directEmailSuccess}
+                  </div>
+                ) : (
+                  <form onSubmit={handleSendDirectEmail} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Recipient Email (Publisher)</label>
+                      <input
+                        type="email"
+                        required
+                        value={directEmailRecipient}
+                        onChange={(e) => setDirectEmailRecipient(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', backgroundColor: tokens.colors.surface, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Email System Template</label>
+                      <select
+                        value={selectedTemplateKey}
+                        onChange={(e) => setSelectedTemplateKey(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', backgroundColor: tokens.colors.surface, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                      >
+                        <option value="moderation_action_notice">Moderation Action Notice (Standard System Template)</option>
+                        <option value="temporary_takedown_7day">7-Day Temporary Content Takedown Notice</option>
+                        <option value="permanent_takedown_notice">Permanent Content Removal Takedown Notice</option>
+                        <option value="copyright_infringement_notice">Copyright / DMCA Infringement Notice</option>
+                        <option value="platform_announcement">Platform Announcement</option>
+                        <option value="custom">Custom Ad-Hoc Email</option>
+                      </select>
+                    </div>
+
+                    {selectedTemplateKey === 'custom' && (
+                      <div>
+                        <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Subject Line</label>
+                        <input
+                          type="text"
+                          required
+                          value={directEmailSubject}
+                          onChange={(e) => setDirectEmailSubject(e.target.value)}
+                          style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', backgroundColor: tokens.colors.surface, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>
+                        {selectedTemplateKey !== 'custom' ? 'Compliance Reason / Admin Notes (Compiled into Template)' : 'Message Body (Dispatched via Platform Email Engine)'}
+                      </label>
+                      <textarea
+                        required
+                        rows={4}
+                        value={directEmailBody}
+                        onChange={(e) => setDirectEmailBody(e.target.value)}
+                        placeholder="Write your administrative notice or compliance reason for the publisher..."
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', backgroundColor: tokens.colors.surface, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px', resize: 'vertical' }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setShowDirectEmailModal(false)}
+                        style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textSecondary, fontSize: '13px', cursor: 'pointer' }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={directEmailSubmitting}
+                        style={{ padding: '8px 18px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', fontWeight: '600', fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Send size={14} />
+                        {directEmailSubmitting ? 'Dispatching Email...' : 'Send Email via System'}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
             </div>
           )}
