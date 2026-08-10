@@ -31,7 +31,7 @@ router.get('/positions', async (req, res, next) => {
     const values = [];
     let idx = 1;
 
-    const isPublicRoute = req.baseUrl.includes('/api/hiring') || !req.admin;
+    const isPublicRoute = req.baseUrl.includes('/api/hiring') || req.baseUrl.includes('/api/career') || req.baseUrl.includes('/api/careers') || !req.admin;
 
     if (isPublicRoute) {
       if (status === 'upcoming') {
@@ -345,22 +345,19 @@ router.get('/my-applications', async (req, res, next) => {
       return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'candidate_id or email is required' } });
     }
 
-    const conditions = [];
+    let whereClause = '';
     const values = [];
-    let idx = 1;
-
-    if (candidate_id) {
-      conditions.push(`(a.candidate_id = $${idx} OR c.id::text = $${idx})`);
+    if (candidate_id && email) {
+      whereClause = `WHERE (a.candidate_id::text = $1 OR c.id::text = $1 OR c.email ILIKE $2)`;
+      values.push(candidate_id, email);
+    } else if (candidate_id) {
+      whereClause = `WHERE (a.candidate_id::text = $1 OR c.id::text = $1)`;
       values.push(candidate_id);
-      idx++;
-    }
-    if (email) {
-      conditions.push(`c.email ILIKE $${idx}`);
+    } else {
+      whereClause = `WHERE c.email ILIKE $1`;
       values.push(email);
-      idx++;
     }
 
-    const whereClause = `WHERE ${conditions.join(' OR ')}`;
     const result = await query(
       `SELECT a.*, c.name AS candidate_name, c.email AS candidate_email, c.phone AS candidate_phone,
               p.title AS position_title, p.department AS position_department, p.type AS position_type, p.location AS position_location,

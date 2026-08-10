@@ -52,6 +52,8 @@ app.use(cookieParser());
 app.use('/healthz', healthzRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/api/hiring', hiringRoutes);
+app.use('/api/career', hiringRoutes);
+app.use('/api/careers', hiringRoutes);
 
 // ─── Auth routes (login/logout BEFORE requireAdminAuth) ────────────────────────
 app.use('/admin/auth', authRoutes);
