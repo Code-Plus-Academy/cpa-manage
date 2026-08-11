@@ -440,6 +440,7 @@ export default function StandaloneEmailPage() {
     <AdminShell
       title="Email System Studio"
       subtitle="Handlebars Email Compiler, Template Draft & Publish Engine, and Campaign Analytics"
+      activeTab="email"
       currentRoute="/email"
       breadcrumb={['Communications', 'Email System']}
       user={adminUser}

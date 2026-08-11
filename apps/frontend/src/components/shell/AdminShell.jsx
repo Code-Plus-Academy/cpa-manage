@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
-  ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command, Briefcase
+  ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send
 } from 'lucide-react';
 import { tokens } from '../../app/theme/tokens';
 
 export default function AdminShell({
   adminUser,
   activeTab,
+  currentRoute,
   onTabChange,
   onLogout,
   breadcrumb = ['Trust & Safety', 'Support Tickets'],
@@ -29,6 +30,25 @@ export default function AdminShell({
     return userPermissions.includes(key);
   };
 
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const effectiveActiveTab = activeTab || (
+    currentRoute ? currentRoute.replace(/^\//, '') : (
+      pathname.includes('/email') ? 'email' :
+      pathname.includes('/hiring') ? 'hiring' :
+      pathname.includes('/careers/my-applications') ? 'my-applications' :
+      pathname.includes('/careers') ? 'careers' :
+      pathname.includes('/tickets') ? 'tickets' :
+      pathname.includes('/copyright') ? 'copyright' :
+      pathname.includes('/institutions') ? 'institutions' :
+      pathname.includes('/reclaim') ? 'reclaim' :
+      pathname.includes('/users') ? 'users' :
+      pathname.includes('/moderation') ? 'content' :
+      pathname.includes('/audit') ? 'audit' :
+      pathname.includes('/system-status') ? 'system-status' :
+      pathname.includes('/admins') ? 'admins' : 'tickets'
+    )
+  );
+
   const navSections = [
     {
       title: 'TRUST & SAFETY',
@@ -42,7 +62,15 @@ export default function AdminShell({
     {
       title: 'HIRING & RECRUITMENT',
       items: [
-        { id: 'hiring', label: 'Careers & Hiring', icon: Briefcase },
+        { id: 'hiring', label: 'Hiring & ATS Studio', icon: Briefcase },
+        { id: 'careers', label: 'Public Careers Portal', icon: Sparkles },
+        { id: 'my-applications', label: 'Applicant Submissions', icon: FileText },
+      ],
+    },
+    {
+      title: 'COMMUNICATIONS',
+      items: [
+        { id: 'email', label: 'Email System Studio', icon: Mail, perm: 'email.templates.edit' },
       ],
     },
     {
@@ -55,12 +83,6 @@ export default function AdminShell({
       title: 'CONTENT',
       items: [
         { id: 'content', label: 'Content Moderation', icon: ShieldAlert, perm: 'content.moderation.view' },
-      ],
-    },
-    {
-      title: 'COMMUNICATIONS',
-      items: [
-        { id: 'email', label: 'Email System', icon: Mail, perm: 'email.templates.edit' },
       ],
     },
     {
@@ -156,11 +178,23 @@ export default function AdminShell({
                 )}
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = activeTab === item.id;
+                  const isActive = effectiveActiveTab === item.id;
 
                   const handleNavClick = (id) => {
                     if (id === 'hiring') {
                       router.push('/hiring');
+                      return;
+                    }
+                    if (id === 'email') {
+                      router.push('/email');
+                      return;
+                    }
+                    if (id === 'careers') {
+                      router.push('/careers');
+                      return;
+                    }
+                    if (id === 'my-applications') {
+                      router.push('/careers/my-applications');
                       return;
                     }
                     if (onTabChange) {
