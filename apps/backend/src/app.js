@@ -49,6 +49,9 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 
 // ─── Public routes ─────────────────────────────────────────────────────────────
+app.all('/', (req, res) => {
+  res.status(200).json({ status: 'ok', service: 'cpa-manage-backend', timestamp: new Date().toISOString() });
+});
 app.use('/healthz', healthzRoutes);
 app.use('/webhook', webhookRoutes);
 app.use('/api/hiring', hiringRoutes);
