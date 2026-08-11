@@ -409,8 +409,60 @@ router.patch(
           }
         }
 
-        const publisherEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email);
-        const publisherName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
+        let fallbackTitle = ticket.category || 'Content Item';
+        let fallbackOwnerEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email) || null;
+        let fallbackOwnerName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
+
+        // Direct DB fallback if gRPC was unavailable
+        if (!fallbackOwnerEmail && target.content_id && target.content_type) {
+          try {
+            const cid = String(target.content_id).trim();
+            const cType = (target.content_type || '').toLowerCase();
+            let dbQuery = null;
+
+            if (cType.includes('post')) {
+              dbQuery = `SELECT p.caption AS title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
+                         FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id::text = $1 OR p.slug = $1`;
+            } else if (cType.includes('note') || cType.includes('resource') || cType.includes('document')) {
+              dbQuery = `SELECT n.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
+                         FROM notes n JOIN users u ON n.user_id = u.id WHERE n.id::text = $1 OR n.slug = $1`;
+            } else if (cType.includes('article')) {
+              dbQuery = `SELECT a.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
+                         FROM articles a JOIN users u ON (a.author_id = u.id OR a.user_id = u.id) WHERE a.id::text = $1 OR a.slug = $1`;
+            } else if (cType.includes('video')) {
+              dbQuery = `SELECT v.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
+                         FROM feed_videos v JOIN users u ON v.user_id = u.id WHERE v.id::text = $1`;
+            }
+
+            if (dbQuery) {
+              const { rows: dbRows } = await query(dbQuery, [cid]).catch(() => ({ rows: [] }));
+              if (dbRows.length > 0) {
+                if (dbRows[0].owner_email) fallbackOwnerEmail = dbRows[0].owner_email;
+                if (dbRows[0].owner_name) fallbackOwnerName = dbRows[0].owner_name;
+                if (dbRows[0].title) fallbackTitle = dbRows[0].title;
+              }
+            }
+          } catch (dbErr) {
+            console.warn('[Direct DB owner lookup warning]:', dbErr.message);
+          }
+        }
+
+        // Direct DB user_id fallback
+        if (!fallbackOwnerEmail && ticket.user_id) {
+          try {
+            const { rows: uRows } = await query(`SELECT email, COALESCE(display_name, full_name) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
+            if (uRows.length > 0) {
+              fallbackOwnerEmail = uRows[0].email;
+              if (uRows[0].owner_name) fallbackOwnerName = uRows[0].owner_name;
+            }
+          } catch (uErr) {
+            console.warn('[Direct DB user_id lookup warning]:', uErr.message);
+          }
+        }
+
+        const publisherEmail = fallbackOwnerEmail;
+        const publisherName = fallbackOwnerName;
+        const finalContentTitle = (contentSummary && contentSummary.title) || fallbackTitle;
 
         if (publisherEmail) {
           enqueueTemplatedEmail({
@@ -421,7 +473,7 @@ router.patch(
               ticket_id: String(ticket.id),
               action_type,
               reason,
-              content_title: (contentSummary && contentSummary.title) || ticket.category || 'Content Item',
+              content_title: finalContentTitle,
               content_url: contentUrl,
             },
             userId: (contentSummary && contentSummary.owner_id) || null,
