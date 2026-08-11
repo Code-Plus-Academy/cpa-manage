@@ -33,6 +33,7 @@ export default function StandaloneEmailPage() {
   const [subjectTemplate, setSubjectTemplate] = useState('');
   const [bodyHtmlTemplate, setBodyHtmlTemplate] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
+  const [templateSystemLocked, setTemplateSystemLocked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Server-Side Live Render Preview Modal
@@ -744,6 +745,18 @@ export default function StandaloneEmailPage() {
                     <option value="social">Social Activity</option>
                     <option value="promotional">Promotional</option>
                   </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
+                  <input
+                    type="checkbox"
+                    id="isSystemLocked"
+                    checked={templateSystemLocked}
+                    onChange={(e) => setTemplateSystemLocked(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: '#f59e0b', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="isSystemLocked" style={{ fontSize: '12px', fontWeight: '600', color: '#f59e0b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', userSelect: 'none' }}>
+                    🔒 Tag System Lock (Mark as core system template — restricts editing & deletion to Root Superadmins)
+                  </label>
                 </div>
                 <div>
                   <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Subject Line (Handlebars Template)</label>
