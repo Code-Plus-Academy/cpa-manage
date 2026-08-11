@@ -206,9 +206,15 @@ export default function HiringAdminDashboard() {
     if (!confirm('Are you sure you want to permanently delete this position? This action cannot be undone.')) return;
     try {
       const res = await apiFetch(`/admin/hiring/positions/${id}`, { method: 'DELETE' });
-      if (res.ok) fetchDashboardData();
+      if (res.ok) {
+        fetchDashboardData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error?.message || 'Cannot delete position. Linked candidate applications exist.');
+      }
     } catch (err) {
       console.error('Failed to delete position:', err);
+      alert('Failed to delete position: ' + (err.message || 'Server error'));
     }
   };
 

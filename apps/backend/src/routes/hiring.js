@@ -276,27 +276,40 @@ router.patch('/positions/:id/archive', async (req, res, next) => {
 
 // DELETE /positions/:id — Delete position
 router.delete('/positions/:id', async (req, res, next) => {
-  const client = await getClient();
   try {
     const { id } = req.params;
-    await client.query('BEGIN');
-    
-    // Explicitly delete associated applications first (which cascade to messages, tasks, documents, etc.)
-    await client.query(`DELETE FROM hiring_applications WHERE position_id = $1`, [id]);
-    
-    // Delete the position itself
-    const result = await client.query(`DELETE FROM hiring_positions WHERE id = $1 RETURNING *`, [id]);
-    await client.query('COMMIT');
 
+    // Check if candidate applications are attached to this position
+    const appCheck = await query(
+      `SELECT COUNT(*)::int AS count FROM hiring_applications WHERE position_id::text = $1`,
+      [id]
+    );
+
+    const appCount = appCheck.rows[0]?.count || 0;
+    if (appCount > 0) {
+      return res.status(400).json({
+        error: {
+          code: 'HAS_APPLICATIONS',
+          message: `Cannot delete position because ${appCount} candidate application(s) are attached to it. Please archive or close the position instead.`
+        }
+      });
+    }
+
+    const result = await query(`DELETE FROM hiring_positions WHERE id = $1 RETURNING *`, [id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Position not found' } });
     }
     res.json({ message: 'Position deleted successfully', position: result.rows[0] });
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (error.code === '23503') {
+      return res.status(400).json({
+        error: {
+          code: 'HAS_REFERENCED_RECORDS',
+          message: 'Cannot delete position because linked candidate applications or records exist. Please archive or close the position instead.'
+        }
+      });
+    }
     next(error);
-  } finally {
-    client.release();
   }
 });
 
