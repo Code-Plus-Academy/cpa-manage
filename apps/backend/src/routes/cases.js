@@ -411,7 +411,34 @@ router.patch(
               content_id: String(target.content_id),
             });
           } catch (csErr) {
-            console.warn('[gRPC GetContentSummary in action notice warning]:', csErr.message);
+            console.warn('[gRPC GetContentSummary in action notice warning]:', csErr.message, '— attempting HTTP fallback...');
+          }
+
+          // HTTP REST API Fallback to Main Backend if gRPC is down
+          if (!contentSummary) {
+            try {
+              const mainBackendUrl = process.env.MAIN_BACKEND_URL || config.MAIN_BACKEND_URL || 'https://api.codeplusacademy.in';
+              const serviceKey = process.env.MANAGE_SERVICE_KEY || process.env.INTERNAL_SERVICE_KEY || process.env.CALLBACK_TOKEN || '';
+              const resp = await fetch(`${mainBackendUrl}/api/internal/content-summary`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': serviceKey ? `Bearer ${serviceKey}` : '',
+                },
+                body: JSON.stringify({ content_type: target.content_type, content_id: String(target.content_id) }),
+                signal: AbortSignal.timeout(5000),
+              }).catch(() => null);
+
+              if (resp && resp.ok) {
+                const data = await resp.json().catch(() => null);
+                if (data && (data.owner_email || data.title)) {
+                  contentSummary = data;
+                  console.info('[HTTP GetContentSummary] Resolved content summary via HTTP fallback for:', target.content_id);
+                }
+              }
+            } catch (httpErr) {
+              console.warn('[HTTP GetContentSummary fallback warning]:', httpErr.message);
+            }
           }
         }
 
