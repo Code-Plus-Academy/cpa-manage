@@ -19,17 +19,23 @@ function resolveTicketTarget(ticket) {
 
   const textToScan = [ticket?.description, ticket?.category, ...(Array.isArray(ticket?.evidence_urls) ? ticket.evidence_urls : [])].filter(Boolean).join(' ');
 
-  const postMatch = textToScan.match(/\/posts\/([a-zA-Z0-9_-]+)/);
+  const postMatch = textToScan.match(/\/(?:posts|post)\/([a-zA-Z0-9_-]+)/i);
   if (postMatch) return { content_type: 'post', content_id: postMatch[1] };
 
-  const noteMatch = textToScan.match(/\/notes\/(?:resource\/)?([a-zA-Z0-9_-]+)/);
+  const noteMatch = textToScan.match(/\/(?:notes|note|resources|resource)\/([a-zA-Z0-9_-]+)/i);
   if (noteMatch) return { content_type: 'note', content_id: noteMatch[1] };
 
-  const videoMatch = textToScan.match(/\/videos\/([a-zA-Z0-9_-]+)/);
+  const videoMatch = textToScan.match(/\/(?:videos|video|shorts|short)\/([a-zA-Z0-9_-]+)/i);
   if (videoMatch) return { content_type: 'video', content_id: videoMatch[1] };
 
-  const articleMatch = textToScan.match(/\/articles\/([a-zA-Z0-9_-]+)/);
+  const articleMatch = textToScan.match(/\/(?:articles|article)\/([a-zA-Z0-9_-]+)/i);
   if (articleMatch) return { content_type: 'article', content_id: articleMatch[1] };
+
+  const courseMatch = textToScan.match(/\/(?:courses|course)\/([a-zA-Z0-9_-]+)/i);
+  if (courseMatch) return { content_type: 'course', content_id: courseMatch[1] };
+
+  const uuidMatch = textToScan.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+  if (uuidMatch) return { content_type: type || 'note', content_id: uuidMatch[0] };
 
   return { content_type: type, content_id: id };
 }
@@ -413,13 +419,13 @@ router.patch(
         let fallbackOwnerEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email) || null;
         let fallbackOwnerName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
 
-        // Direct DB fallback if gRPC was unavailable
-        if (!fallbackOwnerEmail && target.content_id && target.content_type) {
-          try {
-            const cid = String(target.content_id).trim();
-            const cType = (target.content_type || '').toLowerCase();
-            let dbQuery = null;
+        const cid = target.content_id ? String(target.content_id).trim() : '';
+        const cType = (target.content_type || '').toLowerCase();
 
+        // 1. Specific DB query based on content_type
+        if (!fallbackOwnerEmail && cid && cType) {
+          try {
+            let dbQuery = null;
             if (cType.includes('post')) {
               dbQuery = `SELECT p.caption AS title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
                          FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id::text = $1 OR p.slug = $1`;
@@ -429,7 +435,7 @@ router.patch(
             } else if (cType.includes('article')) {
               dbQuery = `SELECT a.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
                          FROM articles a JOIN users u ON (a.author_id = u.id OR a.user_id = u.id) WHERE a.id::text = $1 OR a.slug = $1`;
-            } else if (cType.includes('video')) {
+            } else if (cType.includes('video') || cType.includes('short')) {
               dbQuery = `SELECT v.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
                          FROM feed_videos v JOIN users u ON v.user_id = u.id WHERE v.id::text = $1`;
             }
@@ -447,7 +453,35 @@ router.patch(
           }
         }
 
-        // Direct DB user_id fallback
+        // 2. Universal multi-table UNION ALL search across all content tables if still not found
+        if (!fallbackOwnerEmail && cid) {
+          try {
+            const { rows: uRows } = await query(`
+              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, n.title
+              FROM notes n JOIN users u ON n.user_id = u.id WHERE n.id::text = $1 OR n.slug = $1
+              UNION ALL
+              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, p.caption AS title
+              FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id::text = $1 OR p.slug = $1
+              UNION ALL
+              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, v.title
+              FROM feed_videos v JOIN users u ON v.user_id = u.id WHERE v.id::text = $1
+              UNION ALL
+              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, a.title
+              FROM articles a JOIN users u ON (a.author_id = u.id OR a.user_id = u.id) WHERE a.id::text = $1 OR a.slug = $1
+              LIMIT 1
+            `, [cid]).catch(() => ({ rows: [] }));
+
+            if (uRows.length > 0) {
+              if (uRows[0].owner_email) fallbackOwnerEmail = uRows[0].owner_email;
+              if (uRows[0].owner_name) fallbackOwnerName = uRows[0].owner_name;
+              if (uRows[0].title) fallbackTitle = uRows[0].title;
+            }
+          } catch (uDbErr) {
+            console.warn('[Universal DB owner lookup warning]:', uDbErr.message);
+          }
+        }
+
+        // 3. Direct DB user_id fallback
         if (!fallbackOwnerEmail && ticket.user_id) {
           try {
             const { rows: uRows } = await query(`SELECT email, COALESCE(display_name, full_name) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
@@ -480,6 +514,8 @@ router.patch(
           }).then(() => {
             console.info(`[cases.js] Automated ${selectedTemplateKey} email enqueued for publisher: ${publisherEmail}`);
           }).catch(err => console.warn('[cases.js] Automated notice to publisher failed:', err.message));
+        } else {
+          console.warn(`[cases.js Notice Warning] Could not resolve publisher email for ticket #${ticket.id} (content_id: ${target.content_id}, user_id: ${ticket.user_id}). Email notice skipped.`);
         }
 
         // 2. Send Ticket Update Notice to Complainant / Reporter (if different from publisher)

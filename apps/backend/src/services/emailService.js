@@ -42,7 +42,7 @@ async function sendMail({ to, subject, html, from }) {
 }
 
 async function sendMailHttpFallback({ to, subject, html, from }) {
-  const mainBackendUrl = process.env.MAIN_BACKEND_URL || 'https://api.codeplusacademy.in';
+  const mainBackendUrl = process.env.MAIN_BACKEND_URL;
   if (!mainBackendUrl) {
     console.warn('[EmailService] MAIN_BACKEND_URL not set in environment variables. Tier 2 HTTP fallback skipped.');
     return false;
