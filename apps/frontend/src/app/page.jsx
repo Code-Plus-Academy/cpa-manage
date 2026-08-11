@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Lock, Mail, Key, Activity, Server, AlertCircle, LogOut, CheckCircle2,
   Ticket, Scale, Building2, UserX, FileText, Users, Search, Filter, Clock, Eye,
@@ -12,6 +13,7 @@ import StatusPill from '../components/ui/StatusPill';
 import { tokens } from './theme/tokens';
 
 export default function AdminDashboard() {
+  const router = useRouter();
   const [adminUser, setAdminUser] = useState(null);
   const [loading, setLoading] = useState(true);
 

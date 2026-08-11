@@ -226,14 +226,23 @@ router.patch(
         return next(new AppError('VALIDATION_ERROR', 400, { fields: { action_type: !action_type ? 'required' : undefined, reason: !reason ? 'required' : undefined } }));
       }
 
-      const { rows } = await query('SELECT * FROM support_tickets WHERE id::text = $1', [id]);
+      await client.query('BEGIN');
+
+      const { rows } = await client.query('SELECT * FROM support_tickets WHERE id::text = $1 FOR UPDATE', [id]);
       if (rows.length === 0) {
+        await client.query('ROLLBACK');
         return next(new AppError('NOT_FOUND', 404));
       }
 
       const ticket = rows[0];
 
-      // Permission mapping check
+      // Terminal status guard (Bug #11)
+      if (['closed', 'dismissed', 'action_taken'].includes(ticket.status)) {
+        await client.query('ROLLBACK');
+        return next(new AppError('BAD_REQUEST', 400, { message: `Ticket is already in terminal status '${ticket.status}'. No further actions allowed.` }));
+      }
+
+      // Strict Permission mapping check (Bug #2)
       let requiredPerm = null;
       if (['acknowledge', 'dismiss', 'close'].includes(action_type)) {
         requiredPerm = 'support.respond';
@@ -249,13 +258,18 @@ router.patch(
         requiredPerm = 'claims.institution.reject';
       } else if (action_type === 'transfer_ownership') {
         requiredPerm = 'claims.reclaim.approve';
+      } else {
+        // Unmapped action_type → Default to strict admin restriction (Bug #2 fix)
+        requiredPerm = 'support.respond';
       }
 
-      if (!req.adminUser.is_root && requiredPerm && !req.adminUser.permissions.includes(requiredPerm)) {
+      if (!req.adminUser.is_root && !req.adminUser.permissions.includes(requiredPerm)) {
+        await client.query('ROLLBACK');
         return next(new AppError('PERMISSION_DENIED', 403, { required: requiredPerm }));
       }
 
       if (issue_strike && !req.adminUser.is_root && !req.adminUser.permissions.includes('users.strike')) {
+        await client.query('ROLLBACK');
         return next(new AppError('PERMISSION_DENIED', 403, { required: 'users.strike' }));
       }
 
@@ -309,11 +323,13 @@ router.patch(
           if (cType.includes('post')) {
             targetQuery = `UPDATE posts SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
           } else if (cType.includes('note') || cType.includes('resource') || cType.includes('document')) {
-            targetQuery = `UPDATE notes SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
+            targetQuery = `UPDATE resources SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
           } else if (cType.includes('article')) {
             targetQuery = `UPDATE articles SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
-          } else if (cType.includes('video')) {
+          } else if (cType.includes('video') || cType.includes('short')) {
             targetQuery = `UPDATE feed_videos SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1`;
+          } else if (cType.includes('course')) {
+            targetQuery = `UPDATE courses SET moderation_status = 'removed', status = 'removed', updated_at = NOW() WHERE id::text = $1 OR slug = $1`;
           }
 
           if (targetQuery) {
@@ -542,8 +558,8 @@ router.patch(
           }
         }
 
-        // 5. Direct user_id fallback (try Social DB first, then Content DB)
-        if (!fallbackOwnerEmail && ticket.user_id) {
+        // 5. Direct user_id fallback (ONLY for generic support tickets without a content_id, Bug #1 privacy fix)
+        if (!fallbackOwnerEmail && !cid && ticket.user_id) {
           try {
             const { rows: uRows } = await query(`SELECT email, COALESCE(name, username) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
             if (uRows.length > 0) {

@@ -196,9 +196,13 @@ export default function HiringAdminDashboard() {
         setShowPosModal(false);
         setEditingPos(null);
         fetchDashboardData();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error?.message || data.message || 'Failed to save position. Please check required fields.');
       }
     } catch (err) {
       console.error('Failed to save position:', err);
+      alert('Error saving position: ' + (err.message || 'Server error'));
     }
   };
 

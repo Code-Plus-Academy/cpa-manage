@@ -261,8 +261,8 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     let availablePlaceholders = DEFAULT_TEMPLATES[templateKey]?.available_placeholders || [];
     let isCritical = CRITICAL_TEMPLATE_KEYS.has(templateKey);
 
-    // Merge default mock payloads for missing fields during test sends
-    const mergedPayload = { ...MOCK_SAMPLE_PAYLOADS[templateKey], ...payload };
+    // Do NOT merge mock sample payloads into live production emails (Bug #2 fix)
+    const mergedPayload = useDraft ? { ...MOCK_SAMPLE_PAYLOADS[templateKey], ...payload } : payload;
 
     // Direct single-row query from live & draft columns
     const { rows } = await query(

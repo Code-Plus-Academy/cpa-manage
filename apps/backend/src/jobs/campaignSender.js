@@ -10,7 +10,7 @@ async function runCampaignSender() {
 
     for (const campaign of rows) {
       console.warn(
-        `[Campaign Sender Job] Skipping campaign ${campaign.id}: Bulk dispatch engine for segment filters (${campaign.segment_filter}) is not yet implemented. Campaign status remains 'scheduled'.`
+        `[Campaign Sender Job] Skipping campaign ${campaign.id}: Bulk dispatch engine for segment filters (${typeof campaign.segment_filter === 'object' ? JSON.stringify(campaign.segment_filter) : campaign.segment_filter}) is not yet implemented. Campaign status remains 'scheduled'.`
       );
       // STUB SAFETY: Do NOT update campaign status to 'sent' without dispatching emails.
     }
