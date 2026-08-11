@@ -186,6 +186,8 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
           name: app.candidate_name,
           position: docDetails.offer_title || docDetails.role || app.position_title,
           department: docDetails.organization_name || 'Code Plus Academy',
+          holding_company: docDetails.holding_company || 'Code Plus Education',
+          duration: docDetails.duration || '6 Months',
           startdate: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
           salary: docDetails.compensation || 'Standard Rate',
           offer_deadline: docDetails.deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),

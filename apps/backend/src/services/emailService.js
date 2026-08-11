@@ -13,7 +13,16 @@ const { Resend } = require('resend');
 async function sendMail({ to, subject, html, from }) {
   console.log(`[EmailService] Initiating email dispatch for recipient: ${to}`);
 
-  // Tier 1: Try inter-service gRPC to Main Backend
+  // Tier 1: Direct Resend API dispatch from cpa-manage (Fastest & Self-Sufficient)
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
+  if (apiKey) {
+    console.log(`[EmailService] Dispatching email directly via cpa-manage Resend API...`);
+    const directResendOk = await sendMailDirectResend({ to, subject, html, from });
+    if (directResendOk) return true;
+    console.warn(`[EmailService] Direct Resend API dispatch returned error — falling back to inter-service gRPC/HTTP...`);
+  }
+
+  // Tier 2: Inter-service gRPC to Main Backend
   try {
     const res = await grpcClient.sendEmail({
       to,
@@ -25,20 +34,13 @@ async function sendMail({ to, subject, html, from }) {
     if (res && res.success) {
       console.log(`[EmailService] SUCCESS: Main Backend delivered email over gRPC to ${to} (Message ID: ${res.message_id || 'ok'})`);
       return true;
-    } else {
-      console.warn(`[EmailService] Main Backend gRPC SendEmail returned error (${res?.error || 'Unknown error'}) — attempting Tier 2 HTTP fallback...`);
     }
   } catch (grpcErr) {
-    console.warn(`[EmailService] Tier 1 gRPC call failed (${grpcErr.message || grpcErr}) — attempting Tier 2 HTTP fallback...`);
+    console.warn(`[EmailService] Inter-service gRPC call skipped/failed: ${grpcErr.message || grpcErr}`);
   }
 
-  // Tier 2: Try inter-service HTTP to Main Backend
-  const httpOk = await sendMailHttpFallback({ to, subject, html, from });
-  if (httpOk) return true;
-
-  // Tier 3: Direct Resend API dispatch if cpa-manage has EMAIL_PROVIDER_API_KEY / RESEND_API_KEY configured
-  console.warn(`[EmailService] Tier 2 HTTP fallback failed — attempting Tier 3 direct Resend API dispatch...`);
-  return sendMailDirectResend({ to, subject, html, from });
+  // Tier 3: Inter-service HTTP fallback to Main Backend
+  return sendMailHttpFallback({ to, subject, html, from });
 }
 
 async function sendMailHttpFallback({ to, subject, html, from }) {

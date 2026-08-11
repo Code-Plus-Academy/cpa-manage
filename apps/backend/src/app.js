@@ -48,11 +48,22 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 
-// ─── Public routes ─────────────────────────────────────────────────────────────
-app.all('/', (req, res) => {
-  res.status(200).json({ status: 'ok', service: 'cpa-manage-backend', timestamp: new Date().toISOString() });
-});
-app.use('/healthz', healthzRoutes);
+// ─── Public Auth-Free Health Check Endpoints (For Uptime Robots / Pingdom / Render Pings) ──
+const sendHealthOk = async (req, res) => {
+  try {
+    await query('SELECT 1');
+    res.status(200).json({ status: 'ok', service: 'cpa-manage-backend', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'degraded', service: 'cpa-manage-backend', database: 'error', timestamp: new Date().toISOString() });
+  }
+};
+
+app.get('/', sendHealthOk);
+app.get('/health', sendHealthOk);
+app.get('/healthz', sendHealthOk);
+app.get('/api/health', sendHealthOk);
+app.get('/api/healthz', sendHealthOk);
+
 app.use('/webhook', webhookRoutes);
 app.use('/api/hiring', hiringRoutes);
 app.use('/api/career', hiringRoutes);

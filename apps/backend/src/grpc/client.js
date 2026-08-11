@@ -48,9 +48,9 @@ function wrapCall(method, payload, deadlineMs = 5000) {
 }
 
 module.exports = {
-  getContentSummary: (ref) => wrapCall('getContentSummary', ref, 2000),
-  setContentStatus: (req) => wrapCall('setContentStatus', req, 2000),
-  transferOwnership: (req) => wrapCall('transferOwnership', req, 2000),
-  findContentBySourceUrl: (query) => wrapCall('findContentBySourceUrl', query, 2000),
-  sendEmail: (req) => wrapCall('sendEmail', req, 2000),
+  getContentSummary: (ref) => wrapCall('getContentSummary', ref, 4000),
+  setContentStatus: (req) => wrapCall('setContentStatus', req, 4000),
+  transferOwnership: (req) => wrapCall('transferOwnership', req, 4000),
+  findContentBySourceUrl: (query) => wrapCall('findContentBySourceUrl', query, 4000),
+  sendEmail: (req) => wrapCall('sendEmail', req, 4000),
 };

@@ -23,6 +23,9 @@ export async function apiFetch(path, options = {}) {
       if (errBody?.error?.code === 'SESSION_EXPIRED' || errBody?.error?.code === 'UNAUTHENTICATED') {
         if (typeof window !== 'undefined') {
           localStorage.removeItem('cpa_admin_token');
+          if (window.location.pathname !== '/root/login') {
+            window.location.href = '/root/login';
+          }
         }
       }
     } catch (parseErr) {
