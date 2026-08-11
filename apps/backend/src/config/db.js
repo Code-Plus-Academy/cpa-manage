@@ -184,4 +184,30 @@ const getClient = async () => {
   }
 };
 
-module.exports = { pool, query, getClient, mockSends, mockCampaigns };
+/**
+ * Content DB connection pool (feed_videos, articles, courses, etc.)
+ * Set CONTENT_DATABASE_URL in Render environment variables.
+ */
+let contentPool = null;
+if (process.env.CONTENT_DATABASE_URL) {
+  contentPool = new Pool({
+    connectionString: process.env.CONTENT_DATABASE_URL,
+    ssl: config.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
+
+  contentPool.on('error', (err) => {
+    console.error('[Content DB] Unexpected pool error:', err.message);
+  });
+}
+
+const contentQuery = async (text, params) => {
+  if (!contentPool) {
+    throw new Error('CONTENT_DATABASE_URL not configured — Content DB queries unavailable');
+  }
+  return contentPool.query(text, params);
+};
+
+module.exports = { pool, query, getClient, contentQuery, mockSends, mockCampaigns };

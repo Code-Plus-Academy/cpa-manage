@@ -4,7 +4,7 @@
  */
 const express = require('express');
 const router = express.Router();
-const { query, getClient } = require('../config/db');
+const { query, getClient, contentQuery } = require('../config/db');
 const { AppError } = require('../utils/errors');
 const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
@@ -449,26 +449,19 @@ router.patch(
         const cid = target.content_id ? String(target.content_id).trim() : '';
         const cType = (target.content_type || '').toLowerCase();
 
-        // 1. Specific DB query based on content_type
+        // 1. Social DB lookup (posts, resources live here)
         if (!fallbackOwnerEmail && cid && cType) {
           try {
-            let dbQuery = null;
+            let dbSql = null;
             if (cType.includes('post')) {
-              dbQuery = `SELECT p.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
-                         FROM posts p JOIN users u ON p.creator_id::text = u.id::text WHERE p.id::text = $1 OR p.slug = $1`;
+              dbSql = `SELECT p.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                       FROM posts p JOIN users u ON p.creator_id::text = u.id::text WHERE p.id::text = $1 OR p.slug = $1`;
             } else if (cType.includes('note') || cType.includes('resource') || cType.includes('document')) {
-              dbQuery = `SELECT r.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
-                         FROM resources r JOIN users u ON r.creator_id::text = u.id::text WHERE r.id::text = $1 OR r.slug = $1`;
-            } else if (cType.includes('article')) {
-              dbQuery = `SELECT a.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
-                         FROM articles a JOIN users u ON a.creator_id::text = u.id::text WHERE a.id::text = $1 OR a.slug = $1`;
-            } else if (cType.includes('video') || cType.includes('short')) {
-              dbQuery = `SELECT v.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
-                         FROM feed_videos v JOIN users u ON v.user_id::text = u.id::text WHERE v.id::text = $1`;
+              dbSql = `SELECT r.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                       FROM resources r JOIN users u ON r.creator_id::text = u.id::text WHERE r.id::text = $1 OR r.slug = $1`;
             }
-
-            if (dbQuery) {
-              const { rows: dbRows } = await query(dbQuery, [cid]).catch(() => ({ rows: [] }));
+            if (dbSql) {
+              const { rows: dbRows } = await query(dbSql, [cid]).catch(() => ({ rows: [] }));
               if (dbRows.length > 0) {
                 if (dbRows[0].owner_email) fallbackOwnerEmail = dbRows[0].owner_email;
                 if (dbRows[0].owner_name) fallbackOwnerName = dbRows[0].owner_name;
@@ -476,11 +469,36 @@ router.patch(
               }
             }
           } catch (dbErr) {
-            console.warn('[Direct DB owner lookup warning]:', dbErr.message);
+            console.warn('[Social DB owner lookup warning]:', dbErr.message);
           }
         }
 
-        // 2. Universal multi-table UNION ALL search across all content tables if still not found
+        // 2. Content DB lookup (feed_videos, articles live here)
+        if (!fallbackOwnerEmail && cid && cType) {
+          try {
+            let contentSql = null;
+            // Content DB has its own users table (Supabase auth.users)
+            if (cType.includes('video') || cType.includes('short')) {
+              contentSql = `SELECT v.title, u.email AS owner_email
+                            FROM feed_videos v JOIN auth.users u ON v.user_id = u.id WHERE v.id::text = $1`;
+            } else if (cType.includes('article')) {
+              contentSql = `SELECT a.title, u.email AS owner_email
+                            FROM articles a JOIN auth.users u ON a.creator_id = u.id WHERE a.id::text = $1 OR a.slug = $1`;
+            }
+            if (contentSql) {
+              const { rows: cRows } = await contentQuery(contentSql, [cid]).catch(() => ({ rows: [] }));
+              if (cRows.length > 0) {
+                if (cRows[0].owner_email) fallbackOwnerEmail = cRows[0].owner_email;
+                if (cRows[0].title) fallbackTitle = cRows[0].title;
+                console.info(`[Content DB] Resolved publisher email via Content DB for ${cType}: ${cid}`);
+              }
+            }
+          } catch (cDbErr) {
+            console.warn('[Content DB owner lookup warning]:', cDbErr.message);
+          }
+        }
+
+        // 3. Social DB universal fallback (posts + resources)
         if (!fallbackOwnerEmail && cid) {
           try {
             const { rows: uRows } = await query(`
@@ -489,12 +507,6 @@ router.patch(
               UNION ALL
               SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, p.title
               FROM posts p JOIN users u ON p.creator_id::text = u.id::text WHERE p.id::text = $1 OR p.slug = $1
-              UNION ALL
-              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, v.title
-              FROM feed_videos v JOIN users u ON v.user_id::text = u.id::text WHERE v.id::text = $1
-              UNION ALL
-              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, a.title
-              FROM articles a JOIN users u ON a.creator_id::text = u.id::text WHERE a.id::text = $1 OR a.slug = $1
               LIMIT 1
             `, [cid]).catch(() => ({ rows: [] }));
 
@@ -504,11 +516,33 @@ router.patch(
               if (uRows[0].title) fallbackTitle = uRows[0].title;
             }
           } catch (uDbErr) {
-            console.warn('[Universal DB owner lookup warning]:', uDbErr.message);
+            console.warn('[Social DB universal lookup warning]:', uDbErr.message);
           }
         }
 
-        // 3. Direct DB user_id fallback
+        // 4. Content DB universal fallback (videos + articles)
+        if (!fallbackOwnerEmail && cid) {
+          try {
+            const { rows: cRows } = await contentQuery(`
+              SELECT u.email AS owner_email, v.title
+              FROM feed_videos v JOIN auth.users u ON v.user_id = u.id WHERE v.id::text = $1
+              UNION ALL
+              SELECT u.email AS owner_email, a.title
+              FROM articles a JOIN auth.users u ON a.creator_id = u.id WHERE a.id::text = $1 OR a.slug = $1
+              LIMIT 1
+            `, [cid]).catch(() => ({ rows: [] }));
+
+            if (cRows.length > 0) {
+              if (cRows[0].owner_email) fallbackOwnerEmail = cRows[0].owner_email;
+              if (cRows[0].title) fallbackTitle = cRows[0].title;
+              console.info(`[Content DB] Resolved publisher email via Content DB universal fallback: ${cid}`);
+            }
+          } catch (cDbErr) {
+            console.warn('[Content DB universal lookup warning]:', cDbErr.message);
+          }
+        }
+
+        // 5. Direct user_id fallback (try Social DB first, then Content DB)
         if (!fallbackOwnerEmail && ticket.user_id) {
           try {
             const { rows: uRows } = await query(`SELECT email, COALESCE(name, username) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
@@ -517,7 +551,19 @@ router.patch(
               if (uRows[0].owner_name) fallbackOwnerName = uRows[0].owner_name;
             }
           } catch (uErr) {
-            console.warn('[Direct DB user_id lookup warning]:', uErr.message);
+            console.warn('[Social DB user_id lookup warning]:', uErr.message);
+          }
+
+          if (!fallbackOwnerEmail) {
+            try {
+              const { rows: cRows } = await contentQuery(`SELECT email FROM auth.users WHERE id::text = $1`, [ticket.user_id]);
+              if (cRows.length > 0 && cRows[0].email) {
+                fallbackOwnerEmail = cRows[0].email;
+                console.info(`[Content DB] Resolved user email via Content DB auth.users: ${ticket.user_id}`);
+              }
+            } catch (cErr) {
+              console.warn('[Content DB user_id lookup warning]:', cErr.message);
+            }
           }
         }
 
