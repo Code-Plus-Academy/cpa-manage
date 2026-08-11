@@ -721,31 +721,13 @@ export default function AdminDashboard() {
                   <span style={{ color: tokens.colors.textMuted, display: 'block', fontSize: '11px' }}>Publisher & Creator Details</span>
                   <div style={{ fontSize: '12px', color: tokens.colors.textPrimary, backgroundColor: 'rgba(255,255,255,0.04)', padding: '8px 10px', borderRadius: '6px', marginTop: '4px', border: `1px solid ${tokens.colors.borderSubtle}` }}>
                     <div><strong>Publisher:</strong> {selectedItem.publisher_name || selectedItem.content_summary?.owner_username || 'Creator Account'}</div>
-                    <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px' }}>
-                      <div>
-                        <strong>Email:</strong>{' '}
-                        <span style={{ color: tokens.colors.textPrimary, fontWeight: '600' }}>
-                          {selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email || 'N/A'}
-                        </span>
-                      </div>
-                      {(selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email) && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const targetEmail = selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email;
-                            setDirectEmailRecipient(targetEmail);
-                            setDirectEmailSubject(`[Code+ Academy Case #${selectedItem.id}] Notice regarding content`);
-                            setDirectEmailBody(`Dear Creator,\n\nWe are writing to you regarding Case #${selectedItem.id} on Code+ Academy...\n\n`);
-                            setShowDirectEmailModal(true);
-                          }}
-                          className="btn-secondary"
-                          style={{ padding: '3px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px', backgroundColor: tokens.colors.primary, color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                        >
-                          <Mail size={12} /> Send In-App Email
-                        </button>
-                      )}
+                    <div style={{ marginTop: '2px' }}>
+                      <strong>Email:</strong>{' '}
+                      <span style={{ color: tokens.colors.textPrimary, fontWeight: '600' }}>
+                        {selectedItem.publisher_email || selectedItem.content_summary?.owner_email || selectedItem.reporter_email || 'N/A'}
+                      </span>
                     </div>
-                    <div style={{ marginTop: '4px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
+                    <div style={{ marginTop: '2px' }}><strong>Account Standing:</strong> <span style={{ color: '#34d399', fontWeight: '700' }}>Active (0 Strikes)</span></div>
                   </div>
                 </div>
                 <div>

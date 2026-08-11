@@ -372,13 +372,36 @@ router.patch(
       try {
         const { enqueueTemplatedEmail } = require('../services/emailQueue');
 
-        // 1. Send Moderation Action Notice to Content Publisher / Creator
+        // Select appropriate template based on action_type
+        let selectedTemplateKey = 'moderation_action_notice';
+        if (action_type === 'temporary_takedown') {
+          selectedTemplateKey = 'temporary_takedown_7day';
+        } else if (action_type === 'remove_content') {
+          selectedTemplateKey = 'permanent_takedown_notice';
+        } else if (action_type === 'approve_claim' || action_type.toLowerCase().includes('copyright')) {
+          selectedTemplateKey = 'copyright_infringement_notice';
+        }
+
+        // Generate content_url for inspection
+        let contentUrl = '';
+        if (ticket.content_id) {
+          const typeStr = (ticket.content_type || 'posts').toLowerCase().trim();
+          let pathCat = 'posts';
+          if (typeStr.includes('course')) pathCat = 'courses';
+          else if (typeStr.includes('video')) pathCat = 'videos';
+          else if (typeStr.includes('article')) pathCat = 'articles';
+          else if (typeStr.includes('short')) pathCat = 'shorts';
+          else if (typeStr.includes('note')) pathCat = 'notes';
+          else pathCat = typeStr.endsWith('s') ? typeStr : `${typeStr}s`;
+          contentUrl = `https://www.codeplusacademy.in/${pathCat}/${ticket.content_id}`;
+        }
+
         const publisherEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email);
         const publisherName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
 
         if (publisherEmail) {
           enqueueTemplatedEmail({
-            templateKey: 'moderation_action_notice',
+            templateKey: selectedTemplateKey,
             recipientEmail: publisherEmail,
             payload: {
               name: publisherName,
@@ -386,11 +409,12 @@ router.patch(
               action_type,
               reason,
               content_title: (contentSummary && contentSummary.title) || ticket.category || 'Content Item',
+              content_url: contentUrl,
             },
             userId: (contentSummary && contentSummary.owner_id) || null,
           }).then(() => {
-            console.info(`[cases.js] Moderation action notice email enqueued for publisher: ${publisherEmail}`);
-          }).catch(err => console.warn('[cases.js] Moderation notice to publisher failed:', err.message));
+            console.info(`[cases.js] Automated ${selectedTemplateKey} email enqueued for publisher: ${publisherEmail}`);
+          }).catch(err => console.warn('[cases.js] Automated notice to publisher failed:', err.message));
         }
 
         // 2. Send Ticket Update Notice to Complainant / Reporter (if different from publisher)
@@ -404,6 +428,7 @@ router.patch(
               action_type,
               reason,
               content_title: (contentSummary && contentSummary.title) || ticket.category || 'Reported Item',
+              content_url: contentUrl,
             },
             userId: ticket.user_id || null,
           }).catch(err => console.warn('[cases.js] Update notice to reporter failed:', err.message));

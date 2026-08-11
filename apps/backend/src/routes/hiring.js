@@ -276,15 +276,27 @@ router.patch('/positions/:id/archive', async (req, res, next) => {
 
 // DELETE /positions/:id — Delete position
 router.delete('/positions/:id', async (req, res, next) => {
+  const client = await getClient();
   try {
     const { id } = req.params;
-    const result = await query(`DELETE FROM hiring_positions WHERE id = $1 RETURNING *`, [id]);
+    await client.query('BEGIN');
+    
+    // Explicitly delete associated applications first (which cascade to messages, tasks, documents, etc.)
+    await client.query(`DELETE FROM hiring_applications WHERE position_id = $1`, [id]);
+    
+    // Delete the position itself
+    const result = await client.query(`DELETE FROM hiring_positions WHERE id = $1 RETURNING *`, [id]);
+    await client.query('COMMIT');
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Position not found' } });
     }
     res.json({ message: 'Position deleted successfully', position: result.rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK');
     next(error);
+  } finally {
+    client.release();
   }
 });
 
