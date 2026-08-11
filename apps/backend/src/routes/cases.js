@@ -396,6 +396,19 @@ router.patch(
           contentUrl = `https://www.codeplusacademy.in/${pathCat}/${ticket.content_id}`;
         }
 
+        // Fetch contentSummary if content details are attached
+        let contentSummary = null;
+        if (target.content_id && target.content_type) {
+          try {
+            contentSummary = await contentActionsClient.getContentSummary({
+              content_type: target.content_type,
+              content_id: String(target.content_id),
+            });
+          } catch (csErr) {
+            console.warn('[gRPC GetContentSummary in action notice warning]:', csErr.message);
+          }
+        }
+
         const publisherEmail = ticket.publisher_email || (contentSummary && contentSummary.owner_email);
         const publisherName = ticket.publisher_name || (contentSummary && contentSummary.owner_username) || 'Creator / Publisher';
 
