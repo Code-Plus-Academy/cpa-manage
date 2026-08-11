@@ -13,17 +13,9 @@ const { Resend } = require('resend');
 async function sendMail({ to, subject, html, from }) {
   console.log(`[EmailService] Initiating email dispatch for recipient: ${to}`);
 
-  // Tier 1: Direct Resend API dispatch from cpa-manage (Fastest & Self-Sufficient)
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
-  if (apiKey) {
-    console.log(`[EmailService] Dispatching email directly via cpa-manage Resend API...`);
-    const directResendOk = await sendMailDirectResend({ to, subject, html, from });
-    if (directResendOk) return true;
-    console.warn(`[EmailService] Direct Resend API dispatch returned error — falling back to inter-service gRPC/HTTP...`);
-  }
-
-  // Tier 2: Inter-service gRPC to Main Backend
+  // Tier 1: Inter-service gRPC to Main Backend (gRPC First)
   try {
+    console.log(`[EmailService] Attempting Tier 1 gRPC dispatch to Main Backend...`);
     const res = await grpcClient.sendEmail({
       to,
       subject,
@@ -36,10 +28,19 @@ async function sendMail({ to, subject, html, from }) {
       return true;
     }
   } catch (grpcErr) {
-    console.warn(`[EmailService] Inter-service gRPC call skipped/failed: ${grpcErr.message || grpcErr}`);
+    console.warn(`[EmailService] Tier 1 gRPC call skipped/failed: ${grpcErr.message || grpcErr} — falling back to Resend API...`);
   }
 
-  // Tier 3: Inter-service HTTP fallback to Main Backend
+  // Tier 2: Direct Resend API dispatch from cpa-manage
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
+  if (apiKey) {
+    console.log(`[EmailService] Dispatching email via cpa-manage Resend API fallback...`);
+    const directResendOk = await sendMailDirectResend({ to, subject, html, from });
+    if (directResendOk) return true;
+    console.warn(`[EmailService] Direct Resend API dispatch returned error — falling back to Tier 3 HTTP REST...`);
+  }
+
+  // Tier 3: Inter-service HTTP REST fallback to Main Backend
   return sendMailHttpFallback({ to, subject, html, from });
 }
 
