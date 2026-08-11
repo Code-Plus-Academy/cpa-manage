@@ -1083,6 +1083,10 @@ export default function HiringAdminDashboard() {
                   <div>
                     <label style={{ fontSize: '12px', fontWeight: '600', color: '#9ca3af' }}>Department</label>
                     <select value={posForm.department} onChange={(e) => setPosForm({ ...posForm, department: e.target.value })} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.1)', background: '#0a0b10', color: '#fff' }}>
+                      <option value="Mobile Development">Mobile Development</option>
+                      <option value="Backend & Infrastructure">Backend & Infrastructure</option>
+                      <option value="Web Frontend & Creator Studio">Web Frontend & Creator Studio</option>
+                      <option value="Design & Quality Assurance">Design & Quality Assurance</option>
                       <option value="Engineering">Engineering</option>
                       <option value="Product">Product</option>
                       <option value="Design">Design</option>

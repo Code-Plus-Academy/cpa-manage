@@ -427,17 +427,17 @@ router.patch(
           try {
             let dbQuery = null;
             if (cType.includes('post')) {
-              dbQuery = `SELECT p.caption AS title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
-                         FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id::text = $1 OR p.slug = $1`;
+              dbQuery = `SELECT p.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                         FROM posts p JOIN users u ON p.creator_id::text = u.id::text WHERE p.id::text = $1 OR p.slug = $1`;
             } else if (cType.includes('note') || cType.includes('resource') || cType.includes('document')) {
-              dbQuery = `SELECT n.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
-                         FROM notes n JOIN users u ON n.user_id = u.id WHERE n.id::text = $1 OR n.slug = $1`;
+              dbQuery = `SELECT r.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                         FROM resources r JOIN users u ON r.creator_id::text = u.id::text WHERE r.id::text = $1 OR r.slug = $1`;
             } else if (cType.includes('article')) {
-              dbQuery = `SELECT a.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
-                         FROM articles a JOIN users u ON (a.author_id = u.id OR a.user_id = u.id) WHERE a.id::text = $1 OR a.slug = $1`;
+              dbQuery = `SELECT a.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                         FROM articles a JOIN users u ON a.creator_id::text = u.id::text WHERE a.id::text = $1 OR a.slug = $1`;
             } else if (cType.includes('video') || cType.includes('short')) {
-              dbQuery = `SELECT v.title, u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name
-                         FROM feed_videos v JOIN users u ON v.user_id = u.id WHERE v.id::text = $1`;
+              dbQuery = `SELECT v.title, u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name
+                         FROM feed_videos v JOIN users u ON v.user_id::text = u.id::text WHERE v.id::text = $1`;
             }
 
             if (dbQuery) {
@@ -457,17 +457,17 @@ router.patch(
         if (!fallbackOwnerEmail && cid) {
           try {
             const { rows: uRows } = await query(`
-              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, n.title
-              FROM notes n JOIN users u ON n.user_id = u.id WHERE n.id::text = $1 OR n.slug = $1
+              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, r.title
+              FROM resources r JOIN users u ON r.creator_id::text = u.id::text WHERE r.id::text = $1 OR r.slug = $1
               UNION ALL
-              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, p.caption AS title
-              FROM posts p JOIN users u ON p.user_id = u.id WHERE p.id::text = $1 OR p.slug = $1
+              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, p.title
+              FROM posts p JOIN users u ON p.creator_id::text = u.id::text WHERE p.id::text = $1 OR p.slug = $1
               UNION ALL
-              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, v.title
-              FROM feed_videos v JOIN users u ON v.user_id = u.id WHERE v.id::text = $1
+              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, v.title
+              FROM feed_videos v JOIN users u ON v.user_id::text = u.id::text WHERE v.id::text = $1
               UNION ALL
-              SELECT u.email AS owner_email, COALESCE(u.display_name, u.full_name) AS owner_name, a.title
-              FROM articles a JOIN users u ON (a.author_id = u.id OR a.user_id = u.id) WHERE a.id::text = $1 OR a.slug = $1
+              SELECT u.email AS owner_email, COALESCE(u.name, u.username) AS owner_name, a.title
+              FROM articles a JOIN users u ON a.creator_id::text = u.id::text WHERE a.id::text = $1 OR a.slug = $1
               LIMIT 1
             `, [cid]).catch(() => ({ rows: [] }));
 
@@ -484,7 +484,7 @@ router.patch(
         // 3. Direct DB user_id fallback
         if (!fallbackOwnerEmail && ticket.user_id) {
           try {
-            const { rows: uRows } = await query(`SELECT email, COALESCE(display_name, full_name) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
+            const { rows: uRows } = await query(`SELECT email, COALESCE(name, username) AS owner_name FROM users WHERE id::text = $1`, [ticket.user_id]);
             if (uRows.length > 0) {
               fallbackOwnerEmail = uRows[0].email;
               if (uRows[0].owner_name) fallbackOwnerName = uRows[0].owner_name;
