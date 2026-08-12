@@ -105,6 +105,7 @@ export default function AdminIAMPage() {
     try {
       const res = await apiFetch('/admin/admins');
       if (res.ok) {
+        const data = await res.json();
         setAdmins(data.admins || []);
       }
     } catch (err) {
