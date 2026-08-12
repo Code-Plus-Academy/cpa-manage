@@ -20,6 +20,7 @@ const OPTIONAL_VARS = {
   MAIN_BACKEND_URL: 'https://api.codeplusacademy.in',
   EMAIL_PROVIDER_API_KEY: '',
   EMAIL_FROM_ADDRESS: 'notifications@codeplusacademy.in',
+  RESEND_WEBHOOK_SECRET: process.env.RESEND_WEBHOOK_SECRET || '',
   MANAGE_SERVICE_KEY: '',
   WEBHOOK_SERVICE_KEY: '',
   PDF_SERVICE_URL: 'https://certification-bacnkend.onrender.com',

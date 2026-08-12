@@ -1,11 +1,12 @@
 /**
- * Public webhook endpoints for service-to-service ticket ingestion.
- * Authenticated via X-Service-Key header (shared secret).
+ * Public webhook endpoints for service-to-service ticket ingestion and Resend Inbound Emails.
  */
 const express = require('express');
 const router = express.Router();
 const { query } = require('../config/db');
 const config = require('../config');
+const { Webhook } = require('svix');
+const { enqueueInboundEmailJob } = require('../services/inboundEmailQueue');
 
 function requireServiceKey(req, res, next) {
   const key = req.headers['x-service-key'];
@@ -78,6 +79,63 @@ router.post('/ingest-ticket', requireServiceKey, async (req, res) => {
   } catch (err) {
     console.error('[Webhook ingest-ticket error]', err.message);
     res.status(500).json({ error: { code: 'INTERNAL', message: 'Failed to ingest ticket.' } });
+  }
+});
+
+// POST /webhook/resend-inbound — accepts Resend inbound email webhooks with Svix signature verification
+router.post('/resend-inbound', async (req, res) => {
+  const secret = config.RESEND_WEBHOOK_SECRET || process.env.RESEND_WEBHOOK_SECRET;
+
+  // Verify Svix signature if secret is configured
+  if (secret && secret.trim() !== '') {
+    const svixId = req.headers['svix-id'];
+    const svixTimestamp = req.headers['svix-timestamp'];
+    const svixSignature = req.headers['svix-signature'];
+
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      console.warn('[Webhook resend-inbound] Missing Svix headers');
+      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Missing Svix signature headers.' } });
+    }
+
+    try {
+      const wh = new Webhook(secret.trim());
+      const payloadString = JSON.stringify(req.body);
+      wh.verify(payloadString, {
+        'svix-id': svixId,
+        'svix-timestamp': svixTimestamp,
+        'svix-signature': svixSignature,
+      });
+    } catch (err) {
+      console.error('[Webhook resend-inbound] Svix signature verification failed:', err.message);
+      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid webhook signature.' } });
+    }
+  }
+
+  const payload = req.body || {};
+  const resendEmailId = payload.data?.email_id || payload.data?.id || payload.email_id || payload.id;
+
+  if (!resendEmailId) {
+    // Return 200 OK for ping/challenge webhooks
+    return res.status(200).json({ status: 'ok', message: 'Ping acknowledged.' });
+  }
+
+  // Enqueue job asynchronously and return 200 OK instantly (<50ms)
+  try {
+    enqueueInboundEmailJob({
+      resendEmailId,
+      rawPayload: payload.data || payload,
+    }).catch(err => {
+      console.error('[Webhook resend-inbound] Async job enqueue error:', err.message);
+    });
+
+    return res.status(200).json({
+      status: 'queued',
+      resend_email_id: resendEmailId,
+      received_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[Webhook resend-inbound error]', err.message);
+    return res.status(200).json({ status: 'error_handled', message: err.message });
   }
 });
 

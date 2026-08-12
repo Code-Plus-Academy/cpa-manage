@@ -767,4 +767,263 @@ router.post(
   }
 );
 
+// ─── GET /admin/cases/:id/messages (Fetch Email Thread & Soft Lock Info) ──────
+router.get(
+  '/:id/messages',
+  requirePermission.any(['support.view', 'claims.copyright.view', 'claims.institution.view', 'claims.reclaim.view']),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      const { rows: ticketRows } = await query(
+        `SELECT t.*, a.display_name as viewing_admin_name
+         FROM support_tickets t
+         LEFT JOIN admin_users a ON t.viewing_admin_id = a.id
+         WHERE t.id::text = $1`,
+        [id]
+      );
+
+      if (ticketRows.length === 0) {
+        return next(new AppError('NOT_FOUND', 404, null, 'Ticket not found.'));
+      }
+
+      const ticket = ticketRows[0];
+
+      // Soft Lock Expiry Check (5 min TTL)
+      const LOCK_TTL_MS = 5 * 60 * 1000;
+      let activeLock = null;
+      if (ticket.viewing_admin_id && ticket.viewing_admin_since) {
+        const lockAge = Date.now() - new Date(ticket.viewing_admin_since).getTime();
+        if (lockAge < LOCK_TTL_MS && ticket.viewing_admin_id !== req.adminUser.id) {
+          activeLock = {
+            admin_id: ticket.viewing_admin_id,
+            admin_name: ticket.viewing_admin_name || 'Another Admin',
+            since: ticket.viewing_admin_since,
+          };
+        }
+      }
+
+      const { rows: messages } = await query(
+        `SELECT m.*, a.display_name as sender_admin_name
+         FROM support_email_messages m
+         LEFT JOIN admin_users a ON m.sender_admin_id = a.id
+         WHERE m.ticket_id = $1
+         ORDER BY m.created_at ASC`,
+        [ticket.id]
+      );
+
+      res.json({
+        ticket_id: ticket.id,
+        target_mailbox: ticket.target_mailbox || 'support',
+        reporter_email: ticket.reporter_email,
+        status: ticket.status,
+        messages,
+        active_lock: activeLock,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── POST /admin/cases/:id/reply (Outbound Admin Reply with Thread Headers) ────
+router.post(
+  '/:id/reply',
+  requirePermission.any(['support.respond', 'claims.copyright.take_action', 'claims.institution.take_action']),
+  async (req, res, next) => {
+    const client = await getClient();
+    try {
+      const { id } = req.params;
+      const { message_html, message_text, sender_email, status_action = 'keep_open' } = req.body;
+
+      if (!message_html && !message_text) {
+        return next(new AppError('VALIDATION_ERROR', 400, null, 'Reply content (HTML or Text) is required.'));
+      }
+
+      const { rows: ticketRows } = await query('SELECT * FROM support_tickets WHERE id::text = $1', [id]);
+      if (ticketRows.length === 0) {
+        return next(new AppError('NOT_FOUND', 404, null, 'Ticket not found.'));
+      }
+
+      const ticket = ticketRows[0];
+      const recipientEmail = ticket.reporter_email;
+      if (!recipientEmail) {
+        return next(new AppError('VALIDATION_ERROR', 400, null, 'Ticket has no reporter email address to reply to.'));
+      }
+
+      // Fetch message history for threading headers
+      const { rows: existingMsgs } = await query(
+        `SELECT internet_message_id FROM support_email_messages WHERE ticket_id = $1 ORDER BY created_at ASC`,
+        [ticket.id]
+      );
+
+      const allMessageIds = existingMsgs.map(m => m.internet_message_id).filter(Boolean);
+      const latestMessageId = allMessageIds.length > 0 ? allMessageIds[allMessageIds.length - 1] : null;
+
+      // Build In-Reply-To and References headers
+      const headers = {};
+      if (latestMessageId) {
+        headers['In-Reply-To'] = latestMessageId;
+        headers['References'] = allMessageIds.join(' ');
+      }
+
+      // Determine sender email: provided sender_email -> default sender_emails -> fallback env
+      let fromAddress = sender_email;
+      if (!fromAddress) {
+        const { rows: defaultSenderRows } = await query(
+          'SELECT email, display_name FROM sender_emails WHERE is_default = true LIMIT 1'
+        );
+        if (defaultSenderRows.length > 0) {
+          const s = defaultSenderRows[0];
+          fromAddress = s.display_name ? `${s.display_name} <${s.email}>` : s.email;
+        } else {
+          fromAddress = process.env.EMAIL_FROM_ADDRESS || 'support@codeplusacademy.in';
+        }
+      }
+
+      const subject = `Re: [Ticket #${ticket.id.slice(0, 8)}] ${ticket.category || 'Support Request'}`;
+      const replyBodyHtml = message_html || `<div style="font-family: sans-serif; line-height: 1.6; color: #1e293b;">${(message_text || '').replace(/\n/g, '<br/>')}</div>`;
+      const replyBodyText = message_text || message_html.replace(/<[^>]+>/g, '');
+
+      const { sendMail } = require('../services/emailService');
+      const sendResult = await sendMail({
+        to: recipientEmail,
+        subject,
+        html: replyBodyHtml,
+        from: fromAddress,
+        headers,
+      });
+
+      if (!sendResult || (!sendResult.success && sendResult !== true)) {
+        return next(new AppError('INTERNAL_ERROR', 500, null, 'Failed to dispatch outbound reply email via Resend.'));
+      }
+
+      const resendResponseId = typeof sendResult === 'object' ? sendResult.messageId : null;
+      const outboundMessageId = `<outbound-${Date.now()}-${Math.random().toString(36).substring(2, 8)}@codeplusacademy.in>`;
+
+      await client.query('BEGIN');
+
+      // Insert outbound message history
+      const { rows: insertedMsgs } = await client.query(
+        `INSERT INTO support_email_messages (
+          ticket_id, resend_email_id, internet_message_id, direction,
+          from_address, to_address, subject, body_html, body_text, sender_admin_id, resend_response_id
+        ) VALUES ($1, $2, $3, 'outbound', $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *`,
+        [
+          ticket.id,
+          `outbound_${Date.now()}_${resendResponseId || 'ok'}`,
+          outboundMessageId,
+          typeof fromAddress === 'string' ? fromAddress : 'support@codeplusacademy.in',
+          [recipientEmail],
+          subject,
+          replyBodyHtml,
+          replyBodyText,
+          req.adminUser.id,
+          resendResponseId,
+        ]
+      );
+
+      // Update ticket status, last_message_at, references_message_ids, and release lock
+      const newStatus = status_action === 'resolve' ? 'resolved' : 'open';
+      const updatedRefs = Array.from(new Set([...(ticket.references_message_ids || []), outboundMessageId]));
+
+      await client.query(
+        `UPDATE support_tickets
+         SET status = $1,
+             last_message_at = NOW(),
+             references_message_ids = $2,
+             viewing_admin_id = NULL,
+             viewing_admin_since = NULL,
+             updated_at = NOW()
+         WHERE id = $3`,
+        [newStatus, updatedRefs, ticket.id]
+      );
+
+      // Log ticket action
+      await client.query(
+        `INSERT INTO ticket_actions (ticket_id, admin_id, action_type, reason, issued_strike)
+         VALUES ($1, $2, 'email_reply_sent', $3, false)`,
+        [ticket.id, req.adminUser.id, `Outbound email reply sent to ${recipientEmail} (${status_action})`]
+      );
+
+      await writeAuditLog(client, {
+        actorAdminId: req.adminUser.id,
+        actorIsRoot: req.adminUser.is_root,
+        permissionUsed: 'support.respond',
+        module: 'support',
+        action: 'cases.send_email_reply',
+        targetType: 'ticket',
+        targetId: String(ticket.id),
+        reason: `Sent outbound email reply to ${recipientEmail}`,
+        metadata: { status_action, resend_response_id: resendResponseId },
+      });
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        message: `Reply sent successfully to ${recipientEmail}`,
+        email_message: insertedMsgs[0],
+        ticket_status: newStatus,
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      next(err);
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// ─── POST /admin/cases/:id/lock (Set Admin Soft Lock) ─────────────────────────
+router.post(
+  '/:id/lock',
+  requirePermission.any(['support.view', 'claims.copyright.view', 'claims.institution.view', 'claims.reclaim.view']),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      const { rows } = await query(
+        `UPDATE support_tickets
+         SET viewing_admin_id = $1,
+             viewing_admin_since = NOW()
+         WHERE id::text = $2
+         RETURNING id, viewing_admin_id, viewing_admin_since`,
+        [req.adminUser.id, id]
+      );
+
+      if (rows.length === 0) {
+        return next(new AppError('NOT_FOUND', 404, null, 'Ticket not found.'));
+      }
+
+      res.json({ success: true, lock: rows[0] });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+// ─── DELETE /admin/cases/:id/lock (Release Admin Soft Lock) ───────────────────
+router.delete(
+  '/:id/lock',
+  requirePermission.any(['support.view', 'claims.copyright.view', 'claims.institution.view', 'claims.reclaim.view']),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+
+      await query(
+        `UPDATE support_tickets
+         SET viewing_admin_id = NULL,
+             viewing_admin_since = NULL
+         WHERE id::text = $1 AND (viewing_admin_id = $2 OR viewing_admin_id IS NULL)`,
+        [id, req.adminUser.id]
+      );
+
+      res.json({ success: true, message: 'Lock released.' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 module.exports = router;

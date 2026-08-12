@@ -267,11 +267,26 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     let configuredSender = null;
     let configuredReplyTo = null;
 
-    // Direct single-row query from live & draft columns
+    // Direct single-row query from live & draft columns.
+    // LEFT JOIN sender_emails to resolve sender_email_id FK → actual "From" address.
+    // Falls back to: template-linked sender → platform default sender → env var.
     const { rows } = await query(
-      `SELECT subject_template, body_html_template, draft_subject_template, draft_body_html_template, sender_email, draft_sender_email, reply_to_email, draft_reply_to_email, available_placeholders, is_system_locked 
-       FROM email_templates 
-       WHERE LOWER(TRIM(key)) = LOWER(TRIM($1)) AND is_active = true`,
+      `SELECT
+         t.subject_template, t.body_html_template,
+         t.draft_subject_template, t.draft_body_html_template,
+         t.reply_to_email, t.draft_reply_to_email,
+         t.available_placeholders, t.is_system_locked,
+         -- Resolve sender_email_id FK → display name + email (template-specific sender)
+         se.email          AS linked_sender_email,
+         se.display_name   AS linked_sender_name,
+         -- Also resolve the platform default sender as a fallback
+         sd.email          AS default_sender_email,
+         sd.display_name   AS default_sender_name
+       FROM email_templates t
+       LEFT JOIN sender_emails se ON t.sender_email_id = se.id
+       LEFT JOIN sender_emails sd ON sd.is_default = true
+       WHERE LOWER(TRIM(t.key)) = LOWER(TRIM($1)) AND t.is_active = true
+       LIMIT 1`,
       [templateKey]
     );
 
@@ -282,16 +297,24 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
       const lSub = r.subject_template && r.subject_template.trim() ? r.subject_template : null;
       const lBody = r.body_html_template && r.body_html_template.trim() ? r.body_html_template : null;
 
-      const dSender = r.draft_sender_email && r.draft_sender_email.trim() ? r.draft_sender_email : null;
-      const lSender = r.sender_email && r.sender_email.trim() ? r.sender_email : null;
-
       const dReply = r.draft_reply_to_email && r.draft_reply_to_email.trim() ? r.draft_reply_to_email : null;
       const lReply = r.reply_to_email && r.reply_to_email.trim() ? r.reply_to_email : null;
 
       const effSubject = (useDraft && dSub) ? dSub : lSub;
       const effBody = (useDraft && dBody) ? dBody : lBody;
 
-      configuredSender = (useDraft && dSender) ? dSender : lSender;
+      // Priority order for sender address resolution:
+      //   1. Template-specific sender (sender_email_id FK → sender_emails.email)
+      //   2. Platform default sender (sender_emails WHERE is_default = true)
+      //   3. Env var / Resend account default (handled in sendMail() when from=undefined)
+      const templateLinkedSender = r.linked_sender_email
+        ? (r.linked_sender_name ? `${r.linked_sender_name} <${r.linked_sender_email}>` : r.linked_sender_email)
+        : null;
+      const platformDefaultSender = r.default_sender_email
+        ? (r.default_sender_name ? `${r.default_sender_name} <${r.default_sender_email}>` : r.default_sender_email)
+        : null;
+
+      configuredSender = templateLinkedSender || platformDefaultSender || null;
       configuredReplyTo = (useDraft && dReply) ? dReply : lReply;
 
       if (effSubject) subjectTpl = effSubject;
@@ -322,13 +345,15 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     const compiledBody = sanitizeCompiledHtml(rawCompiledBody);
 
     // Physical dispatch via Resend SDK
-    const sentOk = await sendMail({
+    const sendResult = await sendMail({
       to: recipientEmail,
       subject: compiledSubject,
       html: compiledBody,
       from: configuredSender || undefined,
       replyTo: configuredReplyTo || undefined,
     });
+    // sendMail returns { success, messageId } or legacy boolean true/false
+    const sentOk = (typeof sendResult === 'object' && sendResult !== null) ? sendResult.success : !!sendResult;
 
     // Safe logging in email_sends table (with fallback for legacy schema)
     try {

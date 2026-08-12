@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Mail, Calendar, Send, PieChart, Plus, RefreshCw, Eye, Edit3, Check, X, Clock, Play, Lock, Smartphone, Monitor
+  Mail, Calendar, Send, PieChart, Plus, RefreshCw, Eye, Edit3, Check, X, Clock, Play, Lock, ShieldCheck, Smartphone, Monitor
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
@@ -23,6 +23,14 @@ export default function StandaloneEmailPage() {
   const [campaigns, setCampaigns] = useState([]);
   const [analytics, setAnalytics] = useState(null);
   const [sends, setSends] = useState([]);
+  const [senderEmails, setSenderEmails] = useState([]);
+
+  // Sender Email Modal States
+  const [showSenderModal, setShowSenderModal] = useState(false);
+  const [newSenderEmail, setNewSenderEmail] = useState('');
+  const [newSenderName, setNewSenderName] = useState('');
+  const [newSenderDefault, setNewSenderDefault] = useState(false);
+  const [senderEmailId, setSenderEmailId] = useState('');
 
   // Template Modal States
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -30,7 +38,8 @@ export default function StandaloneEmailPage() {
   const [templateKey, setTemplateKey] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [templateCategory, setTemplateCategory] = useState('transactional');
-  const [senderEmail, setSenderEmail] = useState('notifications@codeplusacademy.in');
+  // Template sender email state — stores the sender_email_id UUID (null = use platform default)
+  const [selectedSenderEmailId, setSelectedSenderEmailId] = useState(null);
   const [replyToEmail, setReplyToEmail] = useState('support@codeplusacademy.in');
   const [subjectTemplate, setSubjectTemplate] = useState('');
   const [bodyHtmlTemplate, setBodyHtmlTemplate] = useState('');
@@ -158,11 +167,18 @@ export default function StandaloneEmailPage() {
   const loadSubTabData = async (subTab) => {
     setDataLoading(true);
     try {
-      if (subTab === 'templates') {
-        const res = await apiFetch('/admin/email/templates');
-        if (res.ok) {
-          const data = await res.json();
+      if (subTab === 'templates' || subTab === 'senders') {
+        const [resTpl, resSenders] = await Promise.all([
+          apiFetch('/admin/email/templates'),
+          apiFetch('/admin/sender-emails'),
+        ]);
+        if (resTpl.ok) {
+          const data = await resTpl.json();
           setTemplates(data.templates || []);
+        }
+        if (resSenders.ok) {
+          const dataSenders = await resSenders.json();
+          setSenderEmails(dataSenders.sender_emails || []);
         }
       } else if (subTab === 'schedules') {
         const res = await apiFetch('/admin/email/schedules');
@@ -223,7 +239,8 @@ export default function StandaloneEmailPage() {
       category: templateCategory,
       subject_template: subjectTemplate,
       body_html_template: bodyHtmlTemplate,
-      sender_email: senderEmail,
+      // Send sender_email_id (UUID FK) — null means "use platform default sender at send-time"
+      sender_email_id: selectedSenderEmailId || null,
       reply_to_email: replyToEmail,
       available_placeholders: availablePlaceholders,
       is_active: templateActive,
@@ -254,6 +271,12 @@ export default function StandaloneEmailPage() {
     }
   };
 
+  // Publish Draft → Live Template
+  const handlePublishTemplate = async (key) => {
+    if (!confirm(`Are you sure you want to publish the draft version of template '${key}'? This will make it live immediately.`)) return;
+    try {
+      const res = await apiFetch(`/admin/email/templates/${key}/publish`, {
+        method: 'POST',
       });
       if (res.ok) {
         loadSubTabData('templates');
@@ -316,6 +339,66 @@ export default function StandaloneEmailPage() {
     }
   };
 
+  // Sender Email Handlers
+  const handleCreateSender = async (e) => {
+    e?.preventDefault();
+    if (!newSenderEmail || !newSenderEmail.includes('@')) {
+      alert('Please enter a valid email address.');
+      return;
+    }
+    try {
+      const res = await apiFetch('/admin/sender-emails', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: newSenderEmail.trim(),
+          display_name: newSenderName.trim(),
+          is_default: newSenderDefault,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setShowSenderModal(false);
+        setNewSenderEmail('');
+        setNewSenderName('');
+        setNewSenderDefault(false);
+        loadSubTabData('senders');
+      } else {
+        alert(data.error?.message || 'Failed to add sender email.');
+      }
+    } catch (err) {
+      alert('Error adding sender email.');
+    }
+  };
+
+  const handleSetDefaultSender = async (id) => {
+    try {
+      const res = await apiFetch(`/admin/sender-emails/${id}/set-default`, { method: 'POST' });
+      if (res.ok) {
+        loadSubTabData('senders');
+      } else {
+        const data = await res.json();
+        alert(data.error?.message || 'Failed to set default sender.');
+      }
+    } catch (err) {
+      alert('Error setting default sender.');
+    }
+  };
+
+  const handleDeleteSender = async (id, email) => {
+    if (!confirm(`Are you sure you want to delete sender address ${email}?`)) return;
+    try {
+      const res = await apiFetch(`/admin/sender-emails/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadSubTabData('senders');
+      } else {
+        const data = await res.json();
+        alert(data.error?.message || 'Failed to delete sender.');
+      }
+    } catch (err) {
+      alert('Error deleting sender.');
+    }
+  };
+
   // Call Server-Side Handlebars Render Preview Endpoint
   const triggerServerSidePreview = async (subTpl, bodyTpl) => {
     setRenderingPreview(true);
@@ -363,7 +446,11 @@ export default function StandaloneEmailPage() {
     setTemplateCategory(tpl.category);
     setSubjectTemplate(tpl.draft_subject_template || tpl.subject_template);
     setBodyHtmlTemplate(tpl.draft_body_html_template || tpl.body_html_template);
+    // Pre-select the template's linked sender_email_id (null = platform default)
+    setSelectedSenderEmailId(tpl.sender_email_id || null);
+    setReplyToEmail(tpl.reply_to_email || 'support@codeplusacademy.in');
     setTemplateActive(tpl.is_active);
+    setTemplateSystemLocked(tpl.is_system_locked || false);
     setShowTemplateModal(true);
   };
 
@@ -371,9 +458,12 @@ export default function StandaloneEmailPage() {
     setTemplateKey('');
     setTemplateName('');
     setTemplateCategory('transactional');
+    setSelectedSenderEmailId(null);
+    setReplyToEmail('support@codeplusacademy.in');
     setSubjectTemplate('');
     setBodyHtmlTemplate('');
     setTemplateActive(true);
+    setTemplateSystemLocked(false);
   };
 
   // Check if admin has email permissions or root access
@@ -450,6 +540,7 @@ export default function StandaloneEmailPage() {
         <div style={{ display: 'flex', gap: '12px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, paddingBottom: '12px' }}>
           {[
             { id: 'templates', label: 'Email Templates', icon: Mail },
+            { id: 'senders', label: 'Sender Addresses', icon: ShieldCheck },
             { id: 'schedules', label: 'Automated Schedules', icon: Calendar },
             { id: 'campaigns', label: 'Broadcast Campaigns', icon: Send },
             { id: 'analytics', label: 'Delivery Analytics', icon: PieChart }
@@ -610,6 +701,94 @@ export default function StandaloneEmailPage() {
           </div>
         )}
 
+        {/* Tab 2: Sender Email Management */}
+        {activeSubTab === 'senders' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: tokens.colors.textPrimary, margin: 0 }}>Verified Sender Email Addresses</h2>
+                <p style={{ fontSize: '13px', color: tokens.colors.textMuted, margin: '4px 0 0 0' }}>Configure default and per-template "From" email addresses.</p>
+              </div>
+              <button
+                onClick={() => setShowSenderModal(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 18px',
+                  backgroundColor: tokens.colors.primary, color: '#FFFFFF', border: 'none',
+                  borderRadius: '8px', fontSize: '13px', fontWeight: '700', cursor: 'pointer'
+                }}
+              >
+                <Plus size={16} /> Add Verified Sender
+              </button>
+            </div>
+
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
+              {dataLoading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading Sender Addresses...</div>
+              ) : senderEmails.length === 0 ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No sender email addresses configured.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: 'rgba(255,255,255,0.02)', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted, fontSize: '12px', fontWeight: '600' }}>
+                      <th style={{ padding: '12px 16px' }}>Sender Email Address</th>
+                      <th style={{ padding: '12px 16px' }}>Display Name</th>
+                      <th style={{ padding: '12px 16px' }}>Role / Status</th>
+                      <th style={{ padding: '12px 16px' }}>Verification Status</th>
+                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {senderEmails.map((sender) => (
+                      <tr key={sender.id} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary }}>
+                        <td style={{ padding: '12px 16px', fontWeight: '700', color: '#38bdf8' }}>
+                          {sender.email}
+                        </td>
+                        <td style={{ padding: '12px 16px', color: tokens.colors.textPrimary }}>
+                          {sender.display_name || 'Code+ Academy'}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          {sender.is_default ? (
+                            <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', backgroundColor: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+                              ⭐ SYSTEM DEFAULT
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: tokens.colors.textMuted }}>Custom Sender</span>
+                          )}
+                        </td>
+                        <td style={{ padding: '12px 16px' }}>
+                          <span style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                            ✓ Verified Domain
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            {!sender.is_default && (
+                              <button
+                                onClick={() => handleSetDefaultSender(sender.id)}
+                                style={{ padding: '6px 12px', borderRadius: '6px', backgroundColor: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fbbf24', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}
+                              >
+                                ⭐ Set Default
+                              </button>
+                            )}
+                            {!sender.is_default && (
+                              <button
+                                onClick={() => handleDeleteSender(sender.id, sender.email)}
+                                style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                              >
+                                <X size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Tab 4: Delivery Analytics */}
         {activeSubTab === 'analytics' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -749,34 +928,28 @@ export default function StandaloneEmailPage() {
                     <option value="social">Social Activity</option>
                     <option value="promotional">Promotional</option>
                   </select>
-                </div>
-
-                {/* Sender Email (From Header) */}
+                  {/* Sender Email (From Header) — dynamically populated from sender_emails DB */}
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Sender Email Address (From Header)</label>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <select
-                      value={senderEmail}
-                      onChange={(e) => setSenderEmail(e.target.value)}
-                      style={{ flex: 1, padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
-                    >
-                      <option value="careers@codeplusacademy.in">Code+ Academy Careers &lt;careers@codeplusacademy.in&gt;</option>
-                      <option value="safety@codeplusacademy.in">Code+ Academy Trust & Safety &lt;safety@codeplusacademy.in&gt;</option>
-                      <option value="security@codeplusacademy.in">Code+ Academy Security &lt;security@codeplusacademy.in&gt;</option>
-                      <option value="support@codeplusacademy.in">Code+ Academy Support &lt;support@codeplusacademy.in&gt;</option>
-                      <option value="notifications@codeplusacademy.in">Code+ Academy Notifications &lt;notifications@codeplusacademy.in&gt;</option>
-                      <option value="noreply@codeplusacademy.in">Code+ Academy Admin &lt;noreply@codeplusacademy.in&gt;</option>
-                      <option value={senderEmail}>Custom: {senderEmail}</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={senderEmail}
-                      onChange={(e) => setSenderEmail(e.target.value)}
-                      placeholder="Custom email..."
-                      style={{ width: '200px', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
-                    />
-                  </div>
-                </div>
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>
+                    Sender Email Address (From Header)
+                    <span style={{ marginLeft: '6px', fontSize: '11px', color: '#a5b4fc' }}>
+                      {selectedSenderEmailId ? '— Template-specific sender' : '— Using platform default ⭐'}
+                    </span>
+                  </label>
+                  <select
+                    value={selectedSenderEmailId || ''}
+                    onChange={(e) => setSelectedSenderEmailId(e.target.value || null)}
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                  >
+                    <option value="">— Use Platform Default Sender ⭐ (Recommended)</option>
+                    {senderEmails.map((se) => (
+                      <option key={se.id} value={se.id}>
+                        {se.display_name ? `${se.display_name} <${se.email}>` : se.email}
+                        {se.is_default ? ' ⭐' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>            </div>
 
                 {/* Reply-To Email Header */}
                 <div>
@@ -920,6 +1093,71 @@ export default function StandaloneEmailPage() {
                   Re-Render Preview with Updated Payload
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+        {/* Add Sender Email Modal */}
+        {showSenderModal && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', width: '100%', maxWidth: '480px', padding: '24px', color: tokens.colors.textPrimary }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: tokens.colors.textPrimary }}>Add Verified Sender Email Address</h3>
+                <button onClick={() => setShowSenderModal(false)} style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer' }}><X size={18} /></button>
+              </div>
+
+              <form onSubmit={handleCreateSender} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Sender Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={newSenderEmail}
+                    onChange={(e) => setNewSenderEmail(e.target.value)}
+                    placeholder="e.g. support@codeplusacademy.in"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Display Name / Name</label>
+                  <input
+                    type="text"
+                    value={newSenderName}
+                    onChange={(e) => setNewSenderName(e.target.value)}
+                    placeholder="e.g. Code+ Academy Support Team"
+                    style={{ width: '100%', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px', borderRadius: '6px', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                  <input
+                    type="checkbox"
+                    id="newSenderDefault"
+                    checked={newSenderDefault}
+                    onChange={(e) => setNewSenderDefault(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="newSenderDefault" style={{ fontSize: '12px', color: '#fbbf24', fontWeight: '600', cursor: 'pointer' }}>
+                    Set as Platform System Default Sender Address ⭐
+                  </label>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowSenderModal(false)}
+                    style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: 'transparent', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted, cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    style={{ padding: '8px 16px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#fff', fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Save Verified Sender
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

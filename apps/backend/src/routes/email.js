@@ -15,7 +15,12 @@ const { writeAuditLog } = require('../middleware/auditLog');
 // GET /admin/email/templates
 router.get('/templates', requirePermission.any(['email.templates.edit', 'email.analytics.view']), async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT * FROM email_templates ORDER BY created_at DESC');
+    const { rows } = await query(
+      `SELECT t.*, s.email as bound_sender_email, s.display_name as bound_sender_display_name, s.is_default as bound_sender_is_default
+       FROM email_templates t
+       LEFT JOIN sender_emails s ON t.sender_email_id = s.id
+       ORDER BY t.created_at DESC`
+    );
     res.json({ templates: rows });
   } catch (err) {
     next(err);
@@ -26,7 +31,13 @@ router.get('/templates', requirePermission.any(['email.templates.edit', 'email.a
 router.get('/templates/:key', requirePermission.any(['email.templates.edit', 'email.analytics.view']), async (req, res, next) => {
   try {
     const { key } = req.params;
-    const { rows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
+    const { rows } = await query(
+      `SELECT t.*, s.email as bound_sender_email, s.display_name as bound_sender_display_name, s.is_default as bound_sender_is_default
+       FROM email_templates t
+       LEFT JOIN sender_emails s ON t.sender_email_id = s.id
+       WHERE t.key = $1`,
+      [key]
+    );
     if (rows.length === 0) {
       return next(new AppError('NOT_FOUND', 404, null, 'Email template not found.'));
     }
@@ -42,7 +53,7 @@ const { compileAndValidateTemplate } = require('../services/emailTemplateCompile
 router.post('/templates', requirePermission('email.templates.edit'), async (req, res, next) => {
   const client = await getClient();
   try {
-    const { key, name, category, subject_template, body_html_template, available_placeholders = [], is_active = true, is_system_locked = false } = req.body;
+    const { key, name, category, subject_template, body_html_template, sender_email_id = null, available_placeholders = [], is_active = true, is_system_locked = false } = req.body;
 
     if (!key || !name || !category || !subject_template || !body_html_template) {
       return next(new AppError('VALIDATION_ERROR', 400, {
@@ -76,10 +87,10 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked, is_active, created_by)
-       VALUES ($1, $2, $3, $4, $5, $4, $5, $6::jsonb, $7, $8, $9)
+      `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, draft_subject_template, draft_body_html_template, sender_email_id, available_placeholders, is_system_locked, is_active, created_by)
+       VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7::jsonb, $8, $9, $10)
        RETURNING *`,
-      [key.trim(), name.trim(), category, subject_template, body_html_template, JSON.stringify(available_placeholders), !!is_system_locked, is_active, req.adminUser.id]
+      [key.trim(), name.trim(), category, subject_template, body_html_template, sender_email_id || null, JSON.stringify(available_placeholders), !!is_system_locked, is_active, req.adminUser.id]
     );
 
     const newTemplate = rows[0];
@@ -139,7 +150,7 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
   const client = await getClient();
   try {
     const { key } = req.params;
-    const { name, category, subject_template, body_html_template, sender_email, reply_to_email, available_placeholders, is_active, is_system_locked } = req.body;
+    const { name, category, subject_template, body_html_template, sender_email, reply_to_email, sender_email_id, available_placeholders, is_active, is_system_locked } = req.body;
 
     const { rows: existingRows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
     if (existingRows.length === 0) {
@@ -157,6 +168,7 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
     const nextBody = body_html_template !== undefined ? body_html_template : (existing.draft_body_html_template || existing.body_html_template);
     const nextSender = sender_email !== undefined ? sender_email : (existing.draft_sender_email || existing.sender_email);
     const nextReplyTo = reply_to_email !== undefined ? reply_to_email : (existing.draft_reply_to_email || existing.reply_to_email);
+    const nextSenderEmailId = sender_email_id !== undefined ? sender_email_id : existing.sender_email_id;
     const nextPlaceholders = available_placeholders !== undefined ? available_placeholders : (existing.available_placeholders || []);
     const nextSystemLocked = is_system_locked !== undefined ? !!is_system_locked : existing.is_system_locked;
 
@@ -177,13 +189,14 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
            draft_body_html_template = $4,
            draft_sender_email = $5,
            draft_reply_to_email = $6,
-           available_placeholders = COALESCE($7::jsonb, available_placeholders),
-           is_active = COALESCE($8, is_active),
-           is_system_locked = $9,
+           sender_email_id = $7,
+           available_placeholders = COALESCE($8::jsonb, available_placeholders),
+           is_active = COALESCE($9, is_active),
+           is_system_locked = $10,
            updated_at = NOW()
-       WHERE key = $10
+       WHERE key = $11
        RETURNING *`,
-      [name, category, nextSubject, nextBody, nextSender, nextReplyTo, JSON.stringify(nextPlaceholders), is_active, nextSystemLocked, key]
+      [name, category, nextSubject, nextBody, nextSender, nextReplyTo, nextSenderEmailId || null, JSON.stringify(nextPlaceholders), is_active, nextSystemLocked, key]
     );
 
     const updatedTemplate = rows[0];
