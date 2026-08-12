@@ -236,23 +236,22 @@ export default function AdminShell({
                   const isActive = effectiveActiveTab === item.id;
 
                   const handleNavClick = (id) => {
-                    if (id === 'hiring') {
-                      router.push('/hiring');
-                      return;
-                    }
-                    if (id === 'email') {
-                      router.push('/email');
-                      return;
-                    }
-                    if (id === 'careers') {
-                      router.push('/careers');
-                      return;
-                    }
-                    if (onTabChange) {
-                      onTabChange(id);
-                    } else {
-                      router.push(`/${id}`);
-                    }
+                    const routeMap = {
+                      tickets: '/tickets',
+                      copyright: '/copyright',
+                      institutions: '/institutions',
+                      reclaim: '/reclaim',
+                      hiring: '/hiring',
+                      careers: '/careers',
+                      email: '/email',
+                      users: '/users',
+                      content: '/moderation',
+                      audit: '/audit',
+                      'system-status': '/system-status',
+                      admins: '/admins',
+                    };
+                    const targetRoute = routeMap[id] || `/${id}`;
+                    router.push(targetRoute);
                   };
 
                   return (

@@ -163,13 +163,9 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (adminUser) {
-      if (activeTab === 'hiring') {
-        router.push('/hiring');
-        return;
-      }
-      loadTabData(activeTab);
+      router.replace('/tickets');
     }
-  }, [adminUser, activeTab, statusFilter, categoryFilter, currentPage]);
+  }, [adminUser]);
 
   const checkAuthStatus = async (retryCount = 0) => {
     try {
