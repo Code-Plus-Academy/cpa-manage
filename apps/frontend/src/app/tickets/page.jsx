@@ -139,7 +139,7 @@ export default function StandaloneTicketsPage() {
 
   useEffect(() => {
     loadTickets();
-  }, [statusFilter, categoryFilter, currentPage, activeViewMode]);
+  }, [statusFilter, categoryFilter, mailboxFilter, currentPage, activeViewMode]);
 
   const checkAuthStatus = async () => {
     try {
@@ -161,8 +161,12 @@ export default function StandaloneTicketsPage() {
       let endpoint = `/admin/cases?page=${currentPage}&limit=15`;
       if (statusFilter !== 'all') endpoint += `&status=${encodeURIComponent(statusFilter)}`;
       if (categoryFilter !== 'all') endpoint += `&category=${encodeURIComponent(categoryFilter)}`;
-      if (activeViewMode === 'emails') endpoint += `&type=email`;
-      else if (activeViewMode === 'reports') endpoint += `&type=report`;
+      if (activeViewMode === 'emails') {
+        endpoint += `&type=email`;
+        if (mailboxFilter !== 'all') endpoint += `&mailbox=${encodeURIComponent(mailboxFilter)}`;
+      } else if (activeViewMode === 'reports') {
+        endpoint += `&type=report`;
+      }
 
       const res = await apiFetch(endpoint);
       if (res.ok) {
@@ -340,6 +344,30 @@ export default function StandaloneTicketsPage() {
             <Mail size={16} />
             📩 Emails Received (Resend Inbox)
           </button>
+
+          {activeViewMode === 'emails' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: 'auto' }}>
+              {['all', 'careers', 'support', 'hello'].map(mb => (
+                <button
+                  key={mb}
+                  onClick={() => { setMailboxFilter(mb); setCurrentPage(1); }}
+                  style={{
+                    padding: '4px 12px',
+                    borderRadius: '16px',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    border: 'none',
+                    backgroundColor: mailboxFilter === mb ? '#4f46e5' : 'rgba(51, 65, 85, 0.6)',
+                    color: mailboxFilter === mb ? '#FFFFFF' : '#94a3b8',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  {mb === 'all' ? 'All Mailboxes' : `${mb}@codeplusacademy.in`}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Filter Toolbar */}
@@ -495,7 +523,13 @@ export default function StandaloneTicketsPage() {
                     </td>
                     <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                       <button
-                        onClick={() => openTicketDetail(t)}
+                        onClick={() => {
+                          if (t.type === 'email_inbound' || t.type === 'email') {
+                            router.push(`/tickets/detail?id=${t.id}`);
+                          } else {
+                            openTicketDetail(t);
+                          }
+                        }}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',

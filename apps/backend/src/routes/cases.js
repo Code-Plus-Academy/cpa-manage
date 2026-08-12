@@ -85,7 +85,7 @@ router.get(
         return res.json({ cases: [], pagination: { page: 1, limit: 20, total_count: 0 } });
       }
 
-      const { type, status, source_surface, assigned_to_me, page = 1, limit = 20 } = req.query;
+      const { type, status, source_surface, assigned_to_me, mailbox, page = 1, limit = 20 } = req.query;
       const offset = (Math.max(1, parseInt(page, 10)) - 1) * Math.min(100, parseInt(limit, 10));
 
       const conditions = [];
@@ -107,6 +107,11 @@ router.get(
           conditions.push(`type = $${idx++}`);
           values.push(type);
         }
+      }
+
+      if (mailbox && mailbox !== 'all') {
+        conditions.push(`target_mailbox = $${idx++}`);
+        values.push(mailbox);
       }
 
       if (status) {

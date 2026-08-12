@@ -11,7 +11,7 @@ const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 
 // GET /admin/sender-emails — List all sender email addresses
-router.get('/', requirePermission.any(['email.templates.edit', 'email.analytics.view', 'cases.view']), async (req, res, next) => {
+router.get('/', requirePermission.any(['email.templates.edit', 'email.analytics.view', 'support.view']), async (req, res, next) => {
   try {
     const { rows } = await query(
       `SELECT s.*, a.display_name as added_by_name

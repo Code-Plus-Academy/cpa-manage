@@ -434,53 +434,55 @@ function TicketDetailContent() {
             </div>
           )}
 
-          {/* Moderation Form Card */}
-          <div style={{ padding: '1.2rem', borderRadius: 12, backgroundColor: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 12px', color: '#f8fafc' }}>Take Moderation Action</h3>
-            <form onSubmit={handleExecuteAction}>
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: 4 }}>Action Type</label>
-                <select
-                  value={actionType}
-                  onChange={(e) => setActionType(e.target.value)}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, backgroundColor: 'rgba(30, 41, 59, 0.8)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.85rem' }}
+          {/* Moderation Form Card (Only for Platform Reports & Claims) */}
+          {ticket.type !== 'email_inbound' && ticket.type !== 'email' && (
+            <div style={{ padding: '1.2rem', borderRadius: 12, backgroundColor: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.08)' }}>
+              <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: '0 0 12px', color: '#f8fafc' }}>Take Moderation Action</h3>
+              <form onSubmit={handleExecuteAction}>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: 4 }}>Action Type</label>
+                  <select
+                    value={actionType}
+                    onChange={(e) => setActionType(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, backgroundColor: 'rgba(30, 41, 59, 0.8)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.85rem' }}
+                  >
+                    <option value="acknowledge">Acknowledge Ticket</option>
+                    <option value="dismiss">Dismiss Claim</option>
+                    <option value="remove_content">Remove Content (gRPC setContentStatus)</option>
+                    <option value="approve_claim">Approve Copyright Claim</option>
+                    <option value="close">Close Ticket (Resolved)</option>
+                  </select>
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: 4 }}>Justification / Reason</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder="Reason for audit log..."
+                    style={{ width: '100%', padding: 8, borderRadius: 6, backgroundColor: 'rgba(30, 41, 59, 0.8)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#f59e0b', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={issueStrike} onChange={(e) => setIssueStrike(e.target.checked)} />
+                    <span>Issue Strike to User</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={executingAction}
+                  style={{ width: '100%', padding: '9px 14px', borderRadius: 6, backgroundColor: '#4f46e5', color: '#fff', border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: executingAction ? 'not-allowed' : 'pointer' }}
                 >
-                  <option value="acknowledge">Acknowledge Ticket</option>
-                  <option value="dismiss">Dismiss Claim</option>
-                  <option value="remove_content">Remove Content (gRPC setContentStatus)</option>
-                  <option value="approve_claim">Approve Copyright Claim</option>
-                  <option value="close">Close Ticket (Resolved)</option>
-                </select>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', color: '#94a3b8', marginBottom: 4 }}>Justification / Reason</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder="Reason for audit log..."
-                  style={{ width: '100%', padding: 8, borderRadius: 6, backgroundColor: 'rgba(30, 41, 59, 0.8)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.82rem', boxSizing: 'border-box' }}
-                />
-              </div>
-
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.8rem', color: '#f59e0b', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={issueStrike} onChange={(e) => setIssueStrike(e.target.checked)} />
-                  <span>Issue Strike to User</span>
-                </label>
-              </div>
-
-              <button
-                type="submit"
-                disabled={executingAction}
-                style={{ width: '100%', padding: '9px 14px', borderRadius: 6, backgroundColor: '#4f46e5', color: '#fff', border: 'none', fontWeight: 600, fontSize: '0.85rem', cursor: executingAction ? 'not-allowed' : 'pointer' }}
-              >
-                {executingAction ? 'Executing...' : 'Execute Action'}
-              </button>
-            </form>
-          </div>
+                  {executingAction ? 'Executing...' : 'Execute Action'}
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* Audit Trail List */}
           <div style={{ padding: '1.2rem', borderRadius: 12, backgroundColor: 'rgba(15, 23, 42, 0.8)', border: '1px solid rgba(255,255,255,0.08)' }}>
