@@ -9,6 +9,7 @@ const config = require('./config');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 const requireAdminAuth = require('./middleware/requireAdminAuth');
+const { query } = require('./config/db');
 const authRoutes = require('./routes/auth');
 const healthzRoutes = require('./routes/healthz');
 const casesRoutes = require('./routes/cases');
@@ -63,6 +64,9 @@ app.get('/health', sendHealthOk);
 app.get('/healthz', sendHealthOk);
 app.get('/api/health', sendHealthOk);
 app.get('/api/healthz', sendHealthOk);
+app.get('/admin/health', sendHealthOk);
+app.get('/admin/healthz', sendHealthOk);
+app.get('/admin/system-status/public-health', sendHealthOk);
 
 app.use('/webhook', webhookRoutes);
 app.use('/api/hiring', hiringRoutes);
