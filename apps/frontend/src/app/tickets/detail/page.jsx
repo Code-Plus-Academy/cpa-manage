@@ -280,7 +280,40 @@ function TicketDetailContent() {
             backgroundColor: 'rgba(11, 15, 25, 0.95)', border: '1px solid rgba(255, 255, 255, 0.08)',
             display: 'flex', flexDirection: 'column', gap: 16
           }}>
-            {messages.length === 0 ? (
+            {/* Always show the original inbound message from ticket.description */}
+            {ticket.description && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%' }}>
+                <div style={{
+                  maxWidth: '82%', padding: '1rem 1.2rem',
+                  borderRadius: '16px 16px 16px 4px',
+                  backgroundColor: 'rgba(30, 58, 138, 0.35)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)', color: '#f8fafc',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 8, fontSize: '0.78rem', color: '#60a5fa', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: 6 }}>
+                    <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <User size={14} />
+                      {ticket.reporter_email || 'Sender'}
+                      <span style={{ fontSize: '0.7rem', background: 'rgba(59,130,246,0.2)', color: '#93c5fd', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>Original Message</span>
+                    </span>
+                    <span>{new Date(ticket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  {/* Subject line */}
+                  <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: 6, fontStyle: 'italic' }}>
+                    Subject: {ticket.category}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {ticket.description}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, fontSize: '0.72rem', color: '#94a3b8' }}>
+                    <span>{new Date(ticket.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Subsequent messages in the thread */}
+            {messages.length === 0 && !ticket.description ? (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem 1rem', color: '#64748b', textAlign: 'center' }}>
                 <Mail size={40} style={{ marginBottom: 12, opacity: 0.5 }} />
                 <p style={{ fontSize: '0.95rem', fontWeight: 600, margin: '0 0 4px' }}>No email thread messages yet</p>
@@ -289,6 +322,17 @@ function TicketDetailContent() {
             ) : (
               messages.map((msg) => {
                 const isInbound = msg.direction === 'inbound';
+                // Extract best available body text
+                const strippedHtml = msg.body_html
+                  ? msg.body_html.replace(/<[^>]+>/g, '').trim()
+                  : '';
+                const bodyContent =
+                  msg.body_text?.trim() ||
+                  strippedHtml ||
+                  msg.subject ||
+                  (isInbound ? ticket.description : '') ||
+                  '(No message body)';
+
                 return (
                   <div
                     key={msg.id}
@@ -316,8 +360,14 @@ function TicketDetailContent() {
                         <span>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
 
+                      {msg.subject && (
+                        <div style={{ fontSize: '0.78rem', color: '#94a3b8', marginBottom: 6, fontStyle: 'italic' }}>
+                          Subject: {msg.subject}
+                        </div>
+                      )}
+
                       <div style={{ fontSize: '0.9rem', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                        {msg.body_text || msg.body_html?.replace(/<[^>]+>/g, '') || msg.subject}
+                        {bodyContent}
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8, fontSize: '0.72rem', color: '#94a3b8' }}>

@@ -86,18 +86,31 @@ async function processInboundEmailJob(jobData) {
   const fromAddress = emailData?.from || emailData?.headers?.from || 'unknown@customer.com';
   const toAddresses = Array.isArray(emailData?.to) ? emailData.to : [emailData?.to || 'support@codeplusacademy.in'];
   const subject = emailData?.subject || 'Inbound Support Request';
-  const rawBodyText = emailData?.text || emailData?.body_text || '';
-  const rawBodyHtml = emailData?.html || emailData?.body_html || `<p>${rawBodyText}</p>`;
+
+  // Resend inbound webhooks can deliver body in multiple shapes — try all of them
+  const rawBodyText =
+    emailData?.text ||
+    emailData?.body_text ||
+    emailData?.payload?.text ||
+    emailData?.content ||
+    emailData?.data?.text ||
+    '';
+  const rawBodyHtml =
+    emailData?.html ||
+    emailData?.body_html ||
+    emailData?.payload?.html ||
+    emailData?.data?.html ||
+    (rawBodyText ? `<p>${rawBodyText.replace(/\n/g, '<br/>')}</p>` : `<p>${subject}</p>`);
   
   // Parse reply text to extract clean message without trailing reply history
-  let cleanText = rawBodyText;
+  let cleanText = rawBodyText || subject;
   try {
     if (rawBodyText) {
       const parsed = new EmailReplyParser().read(rawBodyText);
       cleanText = parsed.getVisibleText() || rawBodyText;
     }
   } catch (e) {
-    cleanText = rawBodyText;
+    cleanText = rawBodyText || subject;
   }
 
   // Internet Message ID & Thread References
