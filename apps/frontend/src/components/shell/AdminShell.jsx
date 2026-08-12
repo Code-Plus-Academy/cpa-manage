@@ -19,19 +19,47 @@ export default function AdminShell({
   children
 }) {
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('cpa_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
   const [searchQuery, setSearchQuery] = useState('');
-  const [fetchedAdminUser, setFetchedAdminUser] = useState(null);
+  const [fetchedAdminUser, setFetchedAdminUser] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('cpa_admin_user');
+      if (cached) {
+        try { return JSON.parse(cached); } catch (e) {}
+      }
+    }
+    return null;
+  });
 
   useEffect(() => {
     if (!passedAdminUser && typeof window !== 'undefined') {
       const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
       fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' })
         .then(res => res.ok ? res.json() : null)
-        .then(data => { if (data?.admin_user) setFetchedAdminUser(data.admin_user); })
+        .then(data => {
+          if (data?.admin_user) {
+            setFetchedAdminUser(data.admin_user);
+            localStorage.setItem('cpa_admin_user', JSON.stringify(data.admin_user));
+          }
+        })
         .catch(() => {});
     }
   }, [passedAdminUser]);
+
+  const handleToggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('cpa_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
   const adminUser = passedAdminUser || fetchedAdminUser;
   const isRoot = adminUser?.is_root;
@@ -354,7 +382,7 @@ export default function AdminShell({
           )}
 
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={handleToggleCollapsed}
             style={{
               width: '100%',
               display: 'flex',
