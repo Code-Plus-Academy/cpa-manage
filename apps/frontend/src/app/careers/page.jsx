@@ -5,6 +5,7 @@ import Link from 'next/link';
 import PublicNavbar from '../../components/shell/PublicNavbar';
 import PublicFooter from '../../components/shell/PublicFooter';
 import { Search, Briefcase, MapPin, Clock, DollarSign, ArrowRight, Sparkles, Building2, ChevronRight } from 'lucide-react';
+import LottieLoader from '../../components/ui/LottieLoader';
 
 export default function PublicCareersPage() {
   const [positions, setPositions] = useState([]);
@@ -158,9 +159,7 @@ export default function PublicCareersPage() {
         </div>
 
         {loading ? (
-          <div style={{ padding: '60px', textAlign: 'center', color: '#9ca3af', fontSize: '15px' }}>
-            Loading career positions...
-          </div>
+          <LottieLoader type="profile" message="Loading career positions..." size={120} />
         ) : filteredPositions.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' }}>
             <Building2 size={48} style={{ color: '#4b5563', marginBottom: '16px' }} />

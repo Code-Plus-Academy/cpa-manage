@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
+import LottieLoader from '../../components/ui/LottieLoader';
 import { tokens } from '../theme/tokens';
 
 export default function StandaloneEmailPage() {
@@ -478,7 +479,7 @@ export default function StandaloneEmailPage() {
   if (loading) {
     return (
       <AdminShell title="Email System Studio" user={adminUser}>
-        <div style={{ padding: '60px 20px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading Email System Studio...</div>
+        <LottieLoader type="article" message="Loading Email System Studio..." variant="card" />
       </AdminShell>
     );
   }
@@ -602,92 +603,97 @@ export default function StandaloneEmailPage() {
               </button>
             </div>
 
-            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflowX: 'auto' }}>
               {dataLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading templates...</div>
+                <LottieLoader type="article" message="Fetching email templates..." size={100} />
               ) : templates.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email templates found in system database.</div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
+                <table style={{ width: '100%', minWidth: '950px', borderCollapse: 'collapse', textAlign: 'left', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ backgroundColor: tokens.colors.bgDark, borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted }}>
-                      <th style={{ padding: '12px 16px' }}>Template Key & Name</th>
-                      <th style={{ padding: '12px 16px' }}>Category</th>
-                      <th style={{ padding: '12px 16px' }}>Sender & Reply-To Address</th>
-                      <th style={{ padding: '12px 16px' }}>Subject Line</th>
-                      <th style={{ padding: '12px 16px' }}>Version & Status</th>
-                      <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+                      <th style={{ padding: '10px 14px', width: '22%' }}>Template Key & Name</th>
+                      <th style={{ padding: '10px 14px', width: '12%' }}>Category</th>
+                      <th style={{ padding: '10px 14px', width: '22%' }}>Sender & Reply-To Address</th>
+                      <th style={{ padding: '10px 14px', width: '22%' }}>Subject Line</th>
+                      <th style={{ padding: '10px 14px', width: '10%' }}>Status</th>
+                      <th style={{ padding: '10px 14px', width: '14%', textAlign: 'right' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {templates.map(tpl => (
                       <tr key={tpl.key} style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}` }}>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ fontWeight: '700', color: tokens.colors.textPrimary, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <td style={{ padding: '10px 14px', maxWdith: '220px', overflow: 'hidden' }}>
+                          <div style={{ fontWeight: '700', color: tokens.colors.textPrimary, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {tpl.name}
                             {tpl.is_system_locked && (
-                              <span title="System Locked Template" style={{ color: '#f59e0b', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                                <Lock size={12} /> System Locked
+                              <span title="System Locked Template" style={{ color: '#f59e0b', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '2px', flexShrink: 0 }}>
+                                <Lock size={12} /> Locked
                               </span>
                             )}
                           </div>
-                          <div style={{ fontSize: '11px', color: tokens.colors.textMuted, fontFamily: 'monospace' }}>{tpl.key}</div>
+                          <div style={{ fontSize: '11px', color: tokens.colors.textMuted, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tpl.key}</div>
                         </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <span style={{ textTransform: 'capitalize', fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <span style={{ textTransform: 'capitalize', fontSize: '11px', fontWeight: '600', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8', whiteSpace: 'nowrap' }}>
                             {tpl.category}
                           </span>
                         </td>
-                        <td style={{ padding: '14px 16px', fontSize: '11px', color: tokens.colors.textMuted }}>
-                          <div><strong style={{ color: '#a5b4fc' }}>From:</strong> {tpl.draft_sender_email || tpl.sender_email || 'notifications@codeplusacademy.in'}</div>
-                          <div><strong style={{ color: '#38bdf8' }}>Reply-To:</strong> {tpl.draft_reply_to_email || tpl.reply_to_email || 'support@codeplusacademy.in'}</div>
+                        <td style={{ padding: '10px 14px', fontSize: '11px', color: tokens.colors.textMuted, maxWidth: '200px' }}>
+                          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tpl.draft_sender_email || tpl.sender_email || 'notifications@codeplusacademy.in'}>
+                            <strong style={{ color: '#a5b4fc' }}>From:</strong> {tpl.draft_sender_email || tpl.sender_email || 'notifications@codeplusacademy.in'}
+                          </div>
+                          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tpl.draft_reply_to_email || tpl.reply_to_email || 'support@codeplusacademy.in'}>
+                            <strong style={{ color: '#38bdf8' }}>Reply:</strong> {tpl.draft_reply_to_email || tpl.reply_to_email || 'support@codeplusacademy.in'}
+                          </div>
                         </td>
-                        <td style={{ padding: '14px 16px', color: tokens.colors.textPrimary, maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <td style={{ padding: '10px 14px', color: tokens.colors.textPrimary, maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={tpl.subject_template}>
                           {tpl.subject_template}
                         </td>
-                        <td style={{ padding: '14px 16px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.08)', color: '#a5b4fc' }}>
+                        <td style={{ padding: '10px 14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 5px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.08)', color: '#a5b4fc' }}>
                               v{tpl.version || 1}
                             </span>
                             <StatusPill status={tpl.is_active ? 'active' : 'inactive'} />
                           </div>
                         </td>
-                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '4px', flexWrap: 'nowrap' }}>
                             <button
                               onClick={() => triggerServerSidePreview(tpl.subject_template, tpl.body_html_template)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'rgba(255,255,255,0.08)', border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', whiteSpace: 'nowrap' }}
                               title="Server-Side Preview"
                             >
-                              <Eye size={14} /> Preview
+                              <Eye size={12} /> Preview
                             </button>
                             <button
                               onClick={() => handleSendTestMail(tpl.key)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: 'none', color: '#10b981', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: 'none', color: '#10b981', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '600', fontSize: '11px', whiteSpace: 'nowrap' }}
                               title="Send Test Email to Admin"
                             >
-                              <Send size={14} /> Test Send
+                              <Send size={12} /> Test
                             </button>
                             <button
                               onClick={() => openEditTemplateModal(tpl)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '600' }}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: tokens.colors.primary, border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '600', fontSize: '11px', whiteSpace: 'nowrap' }}
                             >
-                              <Edit3 size={14} /> Edit Draft
+                              <Edit3 size={12} /> Edit
                             </button>
                             <button
                               onClick={() => handlePublishTemplate(tpl.key)}
-                              style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: '#6366f1', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: '700' }}
+                              style={{ padding: '4px 8px', borderRadius: '6px', backgroundColor: '#6366f1', border: 'none', color: '#FFFFFF', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '700', fontSize: '11px', whiteSpace: 'nowrap' }}
                               title="Promote Draft to Live"
                             >
-                              <Check size={14} /> Publish
+                              <Check size={12} /> Publish
                             </button>
                             {!tpl.is_system_locked && (
                               <button
                                 onClick={() => handleDeleteTemplate(tpl.key)}
-                                style={{ padding: '6px 10px', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                                style={{ padding: '4px 6px', borderRadius: '6px', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', fontSize: '11px' }}
+                                title="Delete Template"
                               >
-                                <X size={14} />
+                                <X size={12} />
                               </button>
                             )}
                           </div>
@@ -721,9 +727,9 @@ export default function StandaloneEmailPage() {
               </button>
             </div>
 
-            <div style={{ backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}`, overflow: 'hidden' }}>
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}`, overflowX: 'auto' }}>
               {dataLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading Sender Addresses...</div>
+                <LottieLoader type="profile" message="Loading verified sender addresses..." size={100} />
               ) : senderEmails.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No sender email addresses configured.</div>
               ) : (
@@ -850,12 +856,12 @@ export default function StandaloneEmailPage() {
             </div>
 
             {/* Individual Sends Log Table */}
-            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflow: 'hidden' }}>
+            <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflowX: 'auto' }}>
               <div style={{ padding: '14px 16px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, fontWeight: '700', fontSize: '14px', color: tokens.colors.textPrimary }}>
                 Individual Dispatch Log ({sends.length} records)
               </div>
               {dataLoading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>Loading send history...</div>
+                <LottieLoader type="search" message="Gathering email delivery logs & analytics..." size={100} />
               ) : sends.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email dispatch events recorded yet.</div>
               ) : (

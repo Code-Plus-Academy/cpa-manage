@@ -6,6 +6,7 @@ import {
   ArrowLeft, Clock, CheckCircle2, AlertCircle, Send, Lock, Mail,
   User, ShieldCheck, ShieldAlert, Sparkles, RefreshCw, Eye, Check
 } from 'lucide-react';
+import LottieLoader from '../../../components/ui/LottieLoader';
 
 function TicketDetailContent() {
   const searchParams = useSearchParams();
@@ -192,10 +193,7 @@ function TicketDetailContent() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#090d16', color: '#94a3b8' }}>
-        <RefreshCw size={24} className="spin-icon" style={{ marginRight: 10 }} />
-        <p>Loading Workspace Ticket #{ticketId || ''}...</p>
-      </div>
+      <LottieLoader type="search" message={`Loading Workspace Ticket #${ticketId || ''}...`} variant="fullscreen" />
     );
   }
 

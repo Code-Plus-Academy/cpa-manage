@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
+import LottieLoader from '../../components/ui/LottieLoader';
 import { tokens } from '../theme/tokens';
 
 export default function StandaloneTicketsPage() {
@@ -370,13 +371,11 @@ export default function StandaloneTicketsPage() {
             borderRadius: '10px',
             backgroundColor: tokens.colors.surfaceElevated,
             border: `1px solid ${tokens.colors.borderSubtle}`,
-            overflow: 'hidden',
+            overflowX: 'auto',
           }}
         >
           {dataLoading ? (
-            <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>
-              Loading support tickets queue...
-            </div>
+            <LottieLoader type="search" message="Fetching support tickets queue..." size={100} />
           ) : filteredTickets.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: tokens.colors.textMuted }}>
               <Ticket size={44} color={tokens.colors.textMuted} style={{ marginBottom: '12px' }} />

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import AdminShell from '../../components/shell/AdminShell';
+import LottieLoader from '../../components/ui/LottieLoader';
 import { apiFetch } from '../../lib/apiClient';
 import {
   Briefcase, Users, CheckCircle2, Clock, XCircle, Search, Filter, Plus,
@@ -370,6 +371,14 @@ export default function HiringAdminDashboard() {
     { id: 'approved', label: 'Approved', color: '#10b981' },
     { id: 'rejected', label: 'Rejected', color: '#ef4444' },
   ];
+
+  if (loading) {
+    return (
+      <AdminShell activeTab="hiring">
+        <LottieLoader type="profile" message="Loading Hiring ATS Studio & Candidate Pipeline..." variant="card" />
+      </AdminShell>
+    );
+  }
 
   return (
     <AdminShell activeTab="hiring">
