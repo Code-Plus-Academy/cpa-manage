@@ -68,25 +68,45 @@ async function processInboundEmailJob(jobData) {
 
   // Fetch full email content from Resend API if payload incomplete
   const config = require('../config');
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY || config.EMAIL_PROVIDER_API_KEY;
+  const apiKey =
+    process.env.EMAIL_PROVIDER_API_KEY ||
+    process.env.RESEND_API_KEY ||
+    process.env.RESEND_KEY ||
+    process.env.RESEND_API_TOKEN ||
+    process.env.RESEND_TOKEN ||
+    process.env.RESEND_SECRET ||
+    config.EMAIL_PROVIDER_API_KEY ||
+    config.RESEND_API_KEY;
+
   let emailData = rawPayload;
 
   if (!emailData?.html && !emailData?.text && apiKey) {
-    try {
-      let fetchResp = await fetch(`https://api.resend.com/emails/receiving/${resendEmailId}`, {
-        headers: { 'Authorization': `Bearer ${apiKey}` },
-      });
-      if (!fetchResp.ok) {
-        fetchResp = await fetch(`https://api.resend.com/emails/${resendEmailId}`, {
+    console.log(`[InboundEmailWorker] Fetching full email body from Resend API for ID: ${resendEmailId}...`);
+    const endpointsToTry = [
+      `https://api.resend.com/emails/receiving/${resendEmailId}`,
+      `https://api.resend.com/emails/inbound/${resendEmailId}`,
+      `https://api.resend.com/emails/received/${resendEmailId}`,
+      `https://api.resend.com/emails/${resendEmailId}`,
+    ];
+
+    for (const endpoint of endpointsToTry) {
+      try {
+        const fetchResp = await fetch(endpoint, {
           headers: { 'Authorization': `Bearer ${apiKey}` },
         });
+        if (fetchResp.ok) {
+          emailData = await fetchResp.json();
+          console.log(`[InboundEmailWorker] Successfully fetched email content from ${endpoint}`);
+          break;
+        } else {
+          console.warn(`[InboundEmailWorker] Resend endpoint ${endpoint} returned HTTP ${fetchResp.status}`);
+        }
+      } catch (fetchErr) {
+        console.warn(`[InboundEmailWorker] Fetch error for ${endpoint}:`, fetchErr.message);
       }
-      if (fetchResp.ok) {
-        emailData = await fetchResp.json();
-      }
-    } catch (fetchErr) {
-      console.warn(`[InboundEmailWorker] Could not fetch raw email from Resend API:`, fetchErr.message);
     }
+  } else if (!emailData?.html && !emailData?.text) {
+    console.warn(`[InboundEmailWorker] Warning: No Resend API Key found in environment (RESEND_API_KEY / EMAIL_PROVIDER_API_KEY / RESEND_KEY / RESEND_TOKEN). Unable to fetch email body for ${resendEmailId}.`);
   }
 
   const fromAddress = emailData?.from || emailData?.headers?.from || 'unknown@customer.com';
@@ -97,15 +117,18 @@ async function processInboundEmailJob(jobData) {
   const rawBodyText =
     emailData?.text ||
     emailData?.body_text ||
+    emailData?.body ||
     emailData?.payload?.text ||
     emailData?.content ||
     emailData?.data?.text ||
+    emailData?.data?.body_text ||
     '';
   const rawBodyHtml =
     emailData?.html ||
     emailData?.body_html ||
     emailData?.payload?.html ||
     emailData?.data?.html ||
+    emailData?.data?.body_html ||
     (rawBodyText ? `<p>${rawBodyText.replace(/\n/g, '<br/>')}</p>` : `<p>${subject}</p>`);
   
   // Parse reply text to extract clean message without trailing reply history
