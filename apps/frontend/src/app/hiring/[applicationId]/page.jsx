@@ -75,20 +75,27 @@ export default function ApplicationDetailAdminPage() {
     const vars = tObj?.variables || ['name', 'role', 'organization_name', 'duration', 'date', 'signatory', 'signatory_role', 'signature_text'];
     setDetectedVariables(vars);
 
+    const sixMonthsLater = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     const initFields = {};
     vars.forEach(v => {
-      if (v === 'name') initFields[v] = application?.candidate_name || '';
-      else if (v === 'role' || v === 'role_title') initFields[v] = application?.position_title || 'Software Developer';
-      else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
-      else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
-      else if (v === 'duration') initFields[v] = '6 Months';
-      else if (v === 'signatory' || v === 'program_lead') initFields[v] = 'Dr. Alex Vance';
+      if (v === 'name')                                                         initFields[v] = application?.candidate_name || '';
+      else if (v === 'role' || v === 'role_title')                              initFields[v] = application?.position_title || 'Software Developer';
+      else if (v === 'company_name' || v === 'organization_name')               initFields[v] = 'Code Plus Academy';
+      else if (v === 'holding_company')                                          initFields[v] = 'Code Plus Education';
+      else if (v === 'duration')                                                 initFields[v] = '6 Months';
+      else if (v === 'signatory' || v === 'program_lead' || v === 'reporting_to') initFields[v] = 'Dr. Alex Vance';
       else if (v === 'signatory_role' || v === 'signatory_title' || v === 'program_lead_title') initFields[v] = 'Director of Engineering';
-      else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
-      else if (v === 'date' || v === 'start_date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      else if (v === 'end_date') initFields[v] = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      else if (v === 'status') initFields[v] = 'SUCCESSFULLY COMPLETED';
-      else if (v === 'compensation') initFields[v] = '$85,000 / Year';
+      else if (v === 'program_lead_org')                                         initFields[v] = 'Code Plus Academy';
+      else if (v === 'signature_text')                                            initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'date' || v === 'start_date')                               initFields[v] = today;
+      else if (v === 'end_date')                                                  initFields[v] = sixMonthsLater;
+      else if (v === 'status')                                                    initFields[v] = 'SUCCESSFULLY COMPLETED';
+      else if (v === 'compensation')                                              initFields[v] = 'Unpaid / Learning & Certification';
+      else if (v === 'engagement')                                                initFields[v] = 'Internship';
+      else if (v === 'work_mode')                                                 initFields[v] = 'Remote';
+      else if (v === 'address')                                                   initFields[v] = 'Remote / India';
       else initFields[v] = '';
     });
     setDynamicFormFields(initFields);
@@ -104,18 +111,25 @@ export default function ApplicationDetailAdminPage() {
     const vars = tObj?.variables || ['name', 'role', 'company_name', 'organization_name', 'compensation', 'start_date', 'date', 'signatory', 'signatory_role', 'signature_text'];
     setDetectedOfferVariables(vars);
 
+    const sixMonthsLater = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     const initFields = {};
     vars.forEach(v => {
-      if (v === 'name') initFields[v] = application?.candidate_name || '';
+      if (v === 'name')                                               initFields[v] = application?.candidate_name || '';
       else if (v === 'role' || v === 'role_title' || v === 'offer_title') initFields[v] = application?.position_title || 'Software Developer';
-      else if (v === 'company_name' || v === 'organization_name') initFields[v] = 'Code Plus Academy';
-      else if (v === 'holding_company') initFields[v] = 'Code Plus Education';
-      else if (v === 'duration') initFields[v] = '6 Months';
-      else if (v === 'compensation') initFields[v] = '$85,000 / Year';
-      else if (v === 'start_date' || v === 'date') initFields[v] = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      else if (v === 'manager_name' || v === 'signatory') initFields[v] = 'Dr. Alex Vance';
-      else if (v === 'signatory_role' || v === 'signatory_title') initFields[v] = 'Director of Engineering';
-      else if (v === 'signature_text') initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'company_name' || v === 'organization_name')    initFields[v] = 'Code Plus Academy';
+      else if (v === 'holding_company')                               initFields[v] = 'Code Plus Education';
+      else if (v === 'duration')                                      initFields[v] = '6 Months';
+      else if (v === 'compensation')                                  initFields[v] = 'Unpaid / Learning & Certification';
+      else if (v === 'start_date' || v === 'date')                    initFields[v] = today;
+      else if (v === 'end_date')                                      initFields[v] = sixMonthsLater;
+      else if (v === 'manager_name' || v === 'signatory' || v === 'reporting_to') initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'signatory_role' || v === 'signatory_title')    initFields[v] = 'Director of Engineering';
+      else if (v === 'signature_text')                                initFields[v] = 'Dr. Alex Vance';
+      else if (v === 'engagement')                                    initFields[v] = 'Internship';
+      else if (v === 'work_mode')                                     initFields[v] = 'Remote';
+      else if (v === 'address')                                       initFields[v] = 'Remote / India';
       else initFields[v] = '';
     });
     setDynamicOfferFormFields(initFields);

@@ -126,21 +126,61 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
     const docType = docDetails.document_type || 'offer_letter';
     const isCertificate = docType === 'certificate' || docDetails.template_name?.includes('certificate');
 
+    const isoToReadable = (d) => new Date(d || Date.now()).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const sixMonthsLater = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
     const payload = {
       template: docDetails.template_name || (isCertificate ? 'certificate.html' : 'offer_letter.html'),
       data: {
+        // ── All user-provided overrides first (lowest priority) ──
+        ...docDetails,
+
+        // ── DB-verified fields always win ─────────────────────────
         name: app.candidate_name,
         role: docDetails.offer_title || docDetails.role || app.position_title,
-        company_name: docDetails.organization_name || 'Code+ Academy',
+
+        // ── certificate.html ─────────────────────────────────────
+        // date, doc_tag, duration, eyebrow, holding_company,
+        // name, organization_name, role, serial_no, signatory,
+        // signatory_role, signature_image, signature_text
         organization_name: docDetails.organization_name || 'Code Plus Academy',
-        holding_company: 'Code Plus Education',
+        company_name: docDetails.company_name || docDetails.organization_name || 'Code+ Academy',
+        holding_company: docDetails.holding_company || 'Code Plus Education',
         serial_no: docDetails.serial_number || `${(isCertificate ? 'CERT' : 'OFFER')}-${new Date().getFullYear()}-000001`,
-        date: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+        date: docDetails.date || isoToReadable(),
         duration: docDetails.duration || '6 Months',
-        compensation: docDetails.compensation || 'Standard Rate',
+        doc_tag: docDetails.doc_tag || (isCertificate ? 'OFFICIAL CERTIFICATE' : 'OFFICIAL OFFER LETTER'),
+        eyebrow: docDetails.eyebrow || 'CODE PLUS ACADEMY CREDENTIAL',
         signatory: docDetails.signatory || 'Dr. Alex Vance',
         signatory_role: docDetails.signatory_role || 'Director of Engineering',
-        signature_text: docDetails.signature_text || docDetails.signatory || 'Dr. Alex Vance'
+        signature_text: docDetails.signature_text || docDetails.signatory || 'Dr. Alex Vance',
+
+        // ── certificate_of_compleation.html ──────────────────────
+        // date, end_date, name, organization_name, program_lead,
+        // program_lead_org, program_lead_title, role, serial_no,
+        // signatory, signatory_title, start_date, status
+        start_date: docDetails.start_date || docDetails.date || isoToReadable(),
+        end_date: docDetails.end_date || sixMonthsLater,
+        status: docDetails.status || 'SUCCESSFULLY COMPLETED',
+        program_lead: docDetails.program_lead || docDetails.signatory || 'Dr. Alex Vance',
+        program_lead_org: docDetails.program_lead_org || docDetails.organization_name || 'Code Plus Academy',
+        program_lead_title: docDetails.program_lead_title || docDetails.signatory_role || 'Director of Engineering',
+        signatory_title: docDetails.signatory_title || docDetails.signatory_role || 'Director of Engineering',
+
+        // ── offer_letter.html ─────────────────────────────────────
+        // company_name, date, duration, holding_company, name,
+        // role, serial_no, signatory, signatory_role,
+        // signature_image, signature_text
+        compensation: docDetails.compensation || 'Standard Rate',
+
+        // ── offer_letter_v2.html ──────────────────────────────────
+        // address, date, end_date, engagement, name,
+        // organization_name, reporting_to, role, serial_no,
+        // signatory, signatory_title, start_date, work_mode
+        address: docDetails.address || 'Remote / India',
+        engagement: docDetails.engagement || 'Internship',
+        reporting_to: docDetails.reporting_to || docDetails.signatory || 'Dr. Alex Vance',
+        work_mode: docDetails.work_mode || 'Remote',
       }
     };
 
