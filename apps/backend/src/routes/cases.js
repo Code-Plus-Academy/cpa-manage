@@ -51,11 +51,11 @@ function getAllowedTicketTypes(adminUser) {
     allowedTypes.push(
       'general-support', 'general', 'support', 'harassment', 'privacy-access',
       'privacy-correction', 'privacy-erasure', 'bug', 'feedback', 'abuse',
-      'spam', 'other', 'inquiry', 'account', 'content'
+      'spam', 'other', 'inquiry', 'account', 'content', 'email_inbound', 'content-report', 'email', 'report'
     );
   }
   if (perms.some(p => p.startsWith('claims.copyright.'))) {
-    allowedTypes.push('copyright');
+    allowedTypes.push('copyright', 'content-report');
   }
   if (perms.some(p => p.startsWith('claims.institution.'))) {
     allowedTypes.push('institution_claim');
@@ -99,12 +99,14 @@ router.get(
       }
 
       if (type) {
-        // If type specified, verify worker holds permission for it
-        if (allowedTypes && !allowedTypes.includes(type)) {
-          return res.json({ cases: [], pagination: { page: 1, limit: 20, total_count: 0 } });
+        if (type === 'email' || type === 'emails' || type === 'email_inbound') {
+          conditions.push(`(type = 'email_inbound' OR type = 'email' OR target_mailbox IS NOT NULL)`);
+        } else if (type === 'report' || type === 'reports' || type === 'content-report') {
+          conditions.push(`(type = 'content-report' OR type = 'report' OR category = 'user_report')`);
+        } else {
+          conditions.push(`type = $${idx++}`);
+          values.push(type);
         }
-        conditions.push(`type = $${idx++}`);
-        values.push(type);
       }
 
       if (status) {

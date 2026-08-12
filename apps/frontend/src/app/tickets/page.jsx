@@ -17,8 +17,7 @@ export default function StandaloneTicketsPage() {
   const [adminUser, setAdminUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const searchView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null;
-  const [activeViewMode, setActiveViewMode] = useState(searchView === 'emails' ? 'emails' : 'reports');
+  const [activeViewMode, setActiveViewMode] = useState('reports');
 
   // Filters & Pagination
   const [statusFilter, setStatusFilter] = useState('all');
@@ -33,9 +32,12 @@ export default function StandaloneTicketsPage() {
   const [dataLoading, setDataLoading] = useState(false);
 
   useEffect(() => {
-    if (searchView === 'emails') setActiveViewMode('emails');
-    else if (searchView === 'reports') setActiveViewMode('reports');
-  }, [searchView]);
+    if (typeof window !== 'undefined') {
+      const searchView = new URLSearchParams(window.location.search).get('view');
+      if (searchView === 'emails') setActiveViewMode('emails');
+      else if (searchView === 'reports') setActiveViewMode('reports');
+    }
+  }, []);
 
   // Detail Modal / Overlay State (2-column layout)
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -158,19 +160,14 @@ export default function StandaloneTicketsPage() {
     try {
       let endpoint = `/admin/cases?page=${currentPage}&limit=15`;
       if (statusFilter !== 'all') endpoint += `&status=${encodeURIComponent(statusFilter)}`;
-      if (categoryFilter !== 'all') endpoint += `&type=${encodeURIComponent(categoryFilter)}`;
-      if (activeViewMode === 'emails') endpoint += `&channel=email`;
+      if (categoryFilter !== 'all') endpoint += `&category=${encodeURIComponent(categoryFilter)}`;
+      if (activeViewMode === 'emails') endpoint += `&type=email`;
+      else if (activeViewMode === 'reports') endpoint += `&type=report`;
 
       const res = await apiFetch(endpoint);
       if (res.ok) {
         const data = await res.json();
-        let loadedCases = data.cases || [];
-
-        // Filter according to view mode
-        if (activeViewMode === 'emails') {
-          loadedCases = loadedCases.filter(c => c.type === 'email' || c.inbound_email || c.category === 'support');
-        }
-
+        const loadedCases = data.cases || [];
         setTickets(loadedCases);
         if (data.pagination) {
           setTotalCount(data.pagination.total_count || loadedCases.length);

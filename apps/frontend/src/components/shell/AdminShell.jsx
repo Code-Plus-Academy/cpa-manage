@@ -19,28 +19,28 @@ export default function AdminShell({
   children
 }) {
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('cpa_sidebar_collapsed') === 'true';
-    }
-    return false;
-  });
+  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedTree, setExpandedTree] = useState({ tickets: true });
-  const [fetchedAdminUser, setFetchedAdminUser] = useState(() => {
+  const [fetchedAdminUser, setFetchedAdminUser] = useState(null);
+
+  useEffect(() => {
     if (typeof window !== 'undefined') {
+      const isCol = localStorage.getItem('cpa_sidebar_collapsed') === 'true';
+      if (isCol) setCollapsed(true);
+
       const cached = localStorage.getItem('cpa_admin_user');
       if (cached) {
-        try { return JSON.parse(cached); } catch (e) {}
-      }
-      const token = localStorage.getItem('cpa_admin_token');
-      if (token) {
-        return { display_name: 'Admin User', email: 'admin@codeplusacademy.in', is_root: true };
+        try { setFetchedAdminUser(JSON.parse(cached)); } catch (e) {}
+      } else {
+        const token = localStorage.getItem('cpa_admin_token');
+        if (token) {
+          setFetchedAdminUser({ display_name: 'Admin User', email: 'admin@codeplusacademy.in', is_root: true });
+        }
       }
     }
-    return null;
-  });
+  }, []);
 
   useEffect(() => {
     if (!passedAdminUser && typeof window !== 'undefined') {
