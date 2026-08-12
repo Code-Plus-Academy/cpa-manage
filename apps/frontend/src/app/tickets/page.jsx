@@ -388,6 +388,7 @@ export default function StandaloneTicketsPage() {
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.borderSubtle}`, backgroundColor: 'rgba(15, 23, 42, 0.4)', color: tokens.colors.textMuted }}>
                   <th style={{ padding: '12px 16px', fontWeight: '600' }}>TICKET ID</th>
                   <th style={{ padding: '12px 16px', fontWeight: '600' }}>CATEGORY / TYPE</th>
+                  <th style={{ padding: '12px 16px', fontWeight: '600' }}>REPORTED TARGET</th>
                   <th style={{ padding: '12px 16px', fontWeight: '600' }}>REPORTER</th>
                   <th style={{ padding: '12px 16px', fontWeight: '600' }}>STATUS</th>
                   <th style={{ padding: '12px 16px', fontWeight: '600' }}>SUBMITTED</th>
@@ -415,6 +416,9 @@ export default function StandaloneTicketsPage() {
                           Surface: {t.source_surface}
                         </span>
                       )}
+                    </td>
+                    <td style={{ padding: '12px 16px', fontFamily: tokens.typography.mono.fontFamily, fontSize: '12px', color: '#a5b4fc' }}>
+                      {t.target_type ? `${String(t.target_type).toUpperCase()}:${t.target_id ? String(t.target_id).slice(0, 8) : 'N/A'}` : (t.reported_item_type ? `${String(t.reported_item_type).toUpperCase()}:${t.reported_item_id ? String(t.reported_item_id).slice(0, 8) : 'N/A'}` : 'N/A')}
                     </td>
                     <td style={{ padding: '12px 16px', color: tokens.colors.textSecondary }}>
                       {t.reporter_email || `User #${t.user_id}`}

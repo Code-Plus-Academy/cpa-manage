@@ -962,7 +962,9 @@ export default function AdminDashboard() {
                               {l.module}.{l.action}
                             </span>
                           </td>
-                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>{l.target_type ? `${l.target_type}:${l.target_id?.slice(0,6)}` : 'N/A'}</td>
+                          <td style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '11px' }}>
+                            {l.target_type ? `${String(l.target_type).toUpperCase()}:${l.target_id ? String(l.target_id).slice(0, 6) : 'N/A'}` : 'N/A'}
+                          </td>
                           <td style={{ fontSize: '12px', color: tokens.colors.textSecondary }}>{l.reason || 'N/A'}</td>
                           <td style={{ fontSize: '12px', color: tokens.colors.textMuted }}>{new Date(l.created_at).toLocaleString()}</td>
                         </tr>

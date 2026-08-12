@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
@@ -9,19 +9,31 @@ import {
 import { tokens } from '../../app/theme/tokens';
 
 export default function AdminShell({
-  adminUser,
+  adminUser: passedAdminUser,
   activeTab,
   currentRoute,
   onTabChange,
   onLogout,
-  breadcrumb = ['Trust & Safety', 'Support Tickets'],
+  breadcrumb: passedBreadcrumb,
   slaAlertCount = 0,
   children
 }) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [fetchedAdminUser, setFetchedAdminUser] = useState(null);
 
+  useEffect(() => {
+    if (!passedAdminUser && typeof window !== 'undefined') {
+      const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
+      fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => { if (data?.admin_user) setFetchedAdminUser(data.admin_user); })
+        .catch(() => {});
+    }
+  }, [passedAdminUser]);
+
+  const adminUser = passedAdminUser || fetchedAdminUser;
   const isRoot = adminUser?.is_root;
   const userPermissions = adminUser?.permissions || [];
 
@@ -35,7 +47,6 @@ export default function AdminShell({
     currentRoute ? currentRoute.replace(/^\//, '') : (
       pathname.includes('/email') ? 'email' :
       pathname.includes('/hiring') ? 'hiring' :
-      pathname.includes('/careers/my-applications') ? 'my-applications' :
       pathname.includes('/careers') ? 'careers' :
       pathname.includes('/tickets') ? 'tickets' :
       pathname.includes('/copyright') ? 'copyright' :
@@ -48,6 +59,23 @@ export default function AdminShell({
       pathname.includes('/admins') ? 'admins' : 'tickets'
     )
   );
+
+  const defaultBreadcrumbs = {
+    email: ['Communications', 'Email System Studio'],
+    hiring: ['Hiring & Recruitment', 'Hiring & ATS Studio'],
+    careers: ['Hiring & Recruitment', 'Public Careers Portal'],
+    tickets: ['Trust & Safety', 'Support Tickets'],
+    copyright: ['Trust & Safety', 'Copyright Claims'],
+    institutions: ['Trust & Safety', 'Institution Claims'],
+    reclaim: ['Trust & Safety', 'Content Reclaim Claims'],
+    users: ['Users', 'User Moderation'],
+    content: ['Content', 'Content Moderation'],
+    audit: ['Administration', 'Audit Log'],
+    'system-status': ['Administration', 'System Status'],
+    admins: ['Administration', 'Admin Management'],
+  };
+
+  const breadcrumb = passedBreadcrumb || defaultBreadcrumbs[effectiveActiveTab] || ['Trust & Safety', 'Support Tickets'];
 
   const navSections = [
     {
@@ -64,7 +92,6 @@ export default function AdminShell({
       items: [
         { id: 'hiring', label: 'Hiring & ATS Studio', icon: Briefcase },
         { id: 'careers', label: 'Public Careers Portal', icon: Sparkles },
-        { id: 'my-applications', label: 'Applicant Submissions', icon: FileText },
       ],
     },
     {
@@ -191,10 +218,6 @@ export default function AdminShell({
                     }
                     if (id === 'careers') {
                       router.push('/careers');
-                      return;
-                    }
-                    if (id === 'my-applications') {
-                      router.push('/careers/my-applications');
                       return;
                     }
                     if (onTabChange) {

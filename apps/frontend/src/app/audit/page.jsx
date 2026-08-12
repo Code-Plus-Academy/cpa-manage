@@ -71,7 +71,7 @@ export default function AdminAuditPage() {
                   <td style={{ padding: 12, fontSize: '0.8rem', color: '#94a3b8' }}>{new Date(l.created_at).toLocaleString()}</td>
                   <td style={{ padding: 12, fontWeight: 600, color: '#818cf8' }}>{l.actor_admin_id}</td>
                   <td style={{ padding: 12, color: '#38bdf8' }}>{l.action}</td>
-                  <td style={{ padding: 12 }}>{l.target_type}:{l.target_id}</td>
+                  <td style={{ padding: 12 }}>{l.target_type ? `${l.target_type}:${l.target_id || 'N/A'}` : 'N/A'}</td>
                   <td style={{ padding: 12, color: '#cbd5e1' }}>{l.reason}</td>
                 </tr>
               ))}
