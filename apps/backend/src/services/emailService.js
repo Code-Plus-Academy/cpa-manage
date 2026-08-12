@@ -10,7 +10,7 @@ const https = require('https');
 const http = require('http');
 const { Resend } = require('resend');
 
-async function sendMail({ to, subject, html, from }) {
+async function sendMail({ to, subject, html, from, replyTo }) {
   console.log(`[EmailService] Initiating email dispatch for recipient: ${to}`);
 
   // Tier 1: Inter-service gRPC to Main Backend (gRPC First)
@@ -35,7 +35,7 @@ async function sendMail({ to, subject, html, from }) {
   const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
   if (apiKey) {
     console.log(`[EmailService] Dispatching email via cpa-manage Resend API fallback...`);
-    const directResendOk = await sendMailDirectResend({ to, subject, html, from });
+    const directResendOk = await sendMailDirectResend({ to, subject, html, from, replyTo });
     if (directResendOk) return true;
     console.warn(`[EmailService] Direct Resend API dispatch returned error — falling back to Tier 3 HTTP REST...`);
   }
@@ -99,7 +99,7 @@ async function sendMailHttpFallback({ to, subject, html, from }) {
   }
 }
 
-async function sendMailDirectResend({ to, subject, html, from }) {
+async function sendMailDirectResend({ to, subject, html, from, replyTo }) {
   const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.error('[EmailService] FAILED: All dispatch methods failed and neither EMAIL_PROVIDER_API_KEY nor RESEND_API_KEY is configured in cpa-manage env.');
@@ -110,26 +110,35 @@ async function sendMailDirectResend({ to, subject, html, from }) {
   const configuredFrom = from || process.env.EMAIL_FROM_ADDRESS || process.env.EMAIL_FROM_AUTH || 'security@codeplusacademy.in';
   const fromAddress = configuredFrom.includes('<') ? configuredFrom : `Code+ Academy Admin <${configuredFrom}>`;
 
+  const emailOptions = {
+    from: fromAddress,
+    to: [to],
+    subject,
+    html,
+  };
+  if (replyTo && replyTo.trim()) {
+    emailOptions.reply_to = replyTo.trim();
+  }
+
   try {
-    console.log(`[EmailService] Sending directly via Resend API from: ${fromAddress}`);
-    const result = await resend.emails.send({
-      from: fromAddress,
-      to: [to],
-      subject,
-      html,
-    });
+    console.log(`[EmailService] Sending directly via Resend API from: ${fromAddress}${replyTo ? ` (Reply-To: ${replyTo})` : ''}`);
+    const result = await resend.emails.send(emailOptions);
 
     if (result.error) {
       console.error('[EmailService] Direct Resend primary send error:', JSON.stringify(result.error));
 
       if (!fromAddress.includes('onboarding@resend.dev')) {
         console.info('[EmailService] Retrying direct Resend via onboarding@resend.dev fallback...');
-        const retryResult = await resend.emails.send({
+        const retryOptions = {
           from: 'Code+ Academy <onboarding@resend.dev>',
           to: [to],
           subject,
           html,
-        });
+        };
+        if (replyTo && replyTo.trim()) {
+          retryOptions.reply_to = replyTo.trim();
+        }
+        const retryResult = await resend.emails.send(retryOptions);
 
         if (retryResult.error) {
           console.error('[EmailService] Direct Resend fallback error:', JSON.stringify(retryResult.error));

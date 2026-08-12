@@ -30,6 +30,8 @@ export default function StandaloneEmailPage() {
   const [templateKey, setTemplateKey] = useState('');
   const [templateName, setTemplateName] = useState('');
   const [templateCategory, setTemplateCategory] = useState('transactional');
+  const [senderEmail, setSenderEmail] = useState('notifications@codeplusacademy.in');
+  const [replyToEmail, setReplyToEmail] = useState('support@codeplusacademy.in');
   const [subjectTemplate, setSubjectTemplate] = useState('');
   const [bodyHtmlTemplate, setBodyHtmlTemplate] = useState('');
   const [templateActive, setTemplateActive] = useState(true);
@@ -221,8 +223,11 @@ export default function StandaloneEmailPage() {
       category: templateCategory,
       subject_template: subjectTemplate,
       body_html_template: bodyHtmlTemplate,
+      sender_email: senderEmail,
+      reply_to_email: replyToEmail,
       available_placeholders: availablePlaceholders,
       is_active: templateActive,
+      is_system_locked: templateSystemLocked,
     };
     if (!isEdit) payload.key = templateKey;
 
@@ -249,12 +254,6 @@ export default function StandaloneEmailPage() {
     }
   };
 
-  // Publish Draft → Live Template
-  const handlePublishTemplate = async (key) => {
-    if (!confirm(`Are you sure you want to publish the draft version of template '${key}'? This will make it live immediately.`)) return;
-    try {
-      const res = await apiFetch(`/admin/email/templates/${key}/publish`, {
-        method: 'POST',
       });
       if (res.ok) {
         loadSubTabData('templates');
@@ -523,6 +522,7 @@ export default function StandaloneEmailPage() {
                     <tr style={{ backgroundColor: tokens.colors.bgDark, borderBottom: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textMuted }}>
                       <th style={{ padding: '12px 16px' }}>Template Key & Name</th>
                       <th style={{ padding: '12px 16px' }}>Category</th>
+                      <th style={{ padding: '12px 16px' }}>Sender & Reply-To Address</th>
                       <th style={{ padding: '12px 16px' }}>Subject Line</th>
                       <th style={{ padding: '12px 16px' }}>Version & Status</th>
                       <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
@@ -546,6 +546,10 @@ export default function StandaloneEmailPage() {
                           <span style={{ textTransform: 'capitalize', fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '4px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: '#818cf8' }}>
                             {tpl.category}
                           </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', fontSize: '11px', color: tokens.colors.textMuted }}>
+                          <div><strong style={{ color: '#a5b4fc' }}>From:</strong> {tpl.draft_sender_email || tpl.sender_email || 'notifications@codeplusacademy.in'}</div>
+                          <div><strong style={{ color: '#38bdf8' }}>Reply-To:</strong> {tpl.draft_reply_to_email || tpl.reply_to_email || 'support@codeplusacademy.in'}</div>
                         </td>
                         <td style={{ padding: '14px 16px', color: tokens.colors.textPrimary, maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {tpl.subject_template}
@@ -745,6 +749,59 @@ export default function StandaloneEmailPage() {
                     <option value="social">Social Activity</option>
                     <option value="promotional">Promotional</option>
                   </select>
+                </div>
+
+                {/* Sender Email (From Header) */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Sender Email Address (From Header)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select
+                      value={senderEmail}
+                      onChange={(e) => setSenderEmail(e.target.value)}
+                      style={{ flex: 1, padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                    >
+                      <option value="careers@codeplusacademy.in">Code+ Academy Careers &lt;careers@codeplusacademy.in&gt;</option>
+                      <option value="safety@codeplusacademy.in">Code+ Academy Trust & Safety &lt;safety@codeplusacademy.in&gt;</option>
+                      <option value="security@codeplusacademy.in">Code+ Academy Security &lt;security@codeplusacademy.in&gt;</option>
+                      <option value="support@codeplusacademy.in">Code+ Academy Support &lt;support@codeplusacademy.in&gt;</option>
+                      <option value="notifications@codeplusacademy.in">Code+ Academy Notifications &lt;notifications@codeplusacademy.in&gt;</option>
+                      <option value="noreply@codeplusacademy.in">Code+ Academy Admin &lt;noreply@codeplusacademy.in&gt;</option>
+                      <option value={senderEmail}>Custom: {senderEmail}</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={senderEmail}
+                      onChange={(e) => setSenderEmail(e.target.value)}
+                      placeholder="Custom email..."
+                      style={{ width: '200px', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Reply-To Email Header */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', color: tokens.colors.textMuted, marginBottom: '4px' }}>Reply-To Email Address (Where User Replies Go)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <select
+                      value={replyToEmail}
+                      onChange={(e) => setReplyToEmail(e.target.value)}
+                      style={{ flex: 1, padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                    >
+                      <option value="careers@codeplusacademy.in">Code+ Academy Careers &lt;careers@codeplusacademy.in&gt;</option>
+                      <option value="support@codeplusacademy.in">Code+ Academy Support &lt;support@codeplusacademy.in&gt;</option>
+                      <option value="security@codeplusacademy.in">Code+ Academy Security &lt;security@codeplusacademy.in&gt;</option>
+                      <option value="safety@codeplusacademy.in">Code+ Academy Trust & Safety &lt;safety@codeplusacademy.in&gt;</option>
+                      <option value="hr@codeplusacademy.in">Code+ Academy HR Team &lt;hr@codeplusacademy.in&gt;</option>
+                      <option value={replyToEmail}>Custom: {replyToEmail}</option>
+                    </select>
+                    <input
+                      type="text"
+                      value={replyToEmail}
+                      onChange={(e) => setReplyToEmail(e.target.value)}
+                      placeholder="Custom reply-to email..."
+                      style={{ width: '200px', padding: '8px', borderRadius: '6px', backgroundColor: tokens.colors.bgDark, border: `1px solid ${tokens.colors.borderSubtle}`, color: tokens.colors.textPrimary, fontSize: '13px' }}
+                    />
+                  </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.25)' }}>
                   <input

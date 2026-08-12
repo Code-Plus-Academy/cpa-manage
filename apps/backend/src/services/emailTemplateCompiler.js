@@ -264,9 +264,12 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
     // Do NOT merge mock sample payloads into live production emails (Bug #2 fix)
     const mergedPayload = useDraft ? { ...MOCK_SAMPLE_PAYLOADS[templateKey], ...payload } : payload;
 
+    let configuredSender = null;
+    let configuredReplyTo = null;
+
     // Direct single-row query from live & draft columns
     const { rows } = await query(
-      `SELECT subject_template, body_html_template, draft_subject_template, draft_body_html_template, available_placeholders, is_system_locked 
+      `SELECT subject_template, body_html_template, draft_subject_template, draft_body_html_template, sender_email, draft_sender_email, reply_to_email, draft_reply_to_email, available_placeholders, is_system_locked 
        FROM email_templates 
        WHERE LOWER(TRIM(key)) = LOWER(TRIM($1)) AND is_active = true`,
       [templateKey]
@@ -279,8 +282,17 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
       const lSub = r.subject_template && r.subject_template.trim() ? r.subject_template : null;
       const lBody = r.body_html_template && r.body_html_template.trim() ? r.body_html_template : null;
 
+      const dSender = r.draft_sender_email && r.draft_sender_email.trim() ? r.draft_sender_email : null;
+      const lSender = r.sender_email && r.sender_email.trim() ? r.sender_email : null;
+
+      const dReply = r.draft_reply_to_email && r.draft_reply_to_email.trim() ? r.draft_reply_to_email : null;
+      const lReply = r.reply_to_email && r.reply_to_email.trim() ? r.reply_to_email : null;
+
       const effSubject = (useDraft && dSub) ? dSub : lSub;
       const effBody = (useDraft && dBody) ? dBody : lBody;
+
+      configuredSender = (useDraft && dSender) ? dSender : lSender;
+      configuredReplyTo = (useDraft && dReply) ? dReply : lReply;
 
       if (effSubject) subjectTpl = effSubject;
       if (effBody) bodyTpl = effBody;
@@ -314,6 +326,8 @@ async function sendTemplatedEmail({ templateKey, recipientEmail, payload = {}, u
       to: recipientEmail,
       subject: compiledSubject,
       html: compiledBody,
+      from: configuredSender || undefined,
+      replyTo: configuredReplyTo || undefined,
     });
 
     // Safe logging in email_sends table (with fallback for legacy schema)

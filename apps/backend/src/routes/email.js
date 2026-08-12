@@ -139,7 +139,7 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
   const client = await getClient();
   try {
     const { key } = req.params;
-    const { name, category, subject_template, body_html_template, available_placeholders, is_active, is_system_locked } = req.body;
+    const { name, category, subject_template, body_html_template, sender_email, reply_to_email, available_placeholders, is_active, is_system_locked } = req.body;
 
     const { rows: existingRows } = await query('SELECT * FROM email_templates WHERE key = $1', [key]);
     if (existingRows.length === 0) {
@@ -155,6 +155,8 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
 
     const nextSubject = subject_template !== undefined ? subject_template : (existing.draft_subject_template || existing.subject_template);
     const nextBody = body_html_template !== undefined ? body_html_template : (existing.draft_body_html_template || existing.body_html_template);
+    const nextSender = sender_email !== undefined ? sender_email : (existing.draft_sender_email || existing.sender_email);
+    const nextReplyTo = reply_to_email !== undefined ? reply_to_email : (existing.draft_reply_to_email || existing.reply_to_email);
     const nextPlaceholders = available_placeholders !== undefined ? available_placeholders : (existing.available_placeholders || []);
     const nextSystemLocked = is_system_locked !== undefined ? !!is_system_locked : existing.is_system_locked;
 
@@ -173,13 +175,15 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
            category = COALESCE($2, category),
            draft_subject_template = $3,
            draft_body_html_template = $4,
-           available_placeholders = COALESCE($5::jsonb, available_placeholders),
-           is_active = COALESCE($6, is_active),
-           is_system_locked = $7,
+           draft_sender_email = $5,
+           draft_reply_to_email = $6,
+           available_placeholders = COALESCE($7::jsonb, available_placeholders),
+           is_active = COALESCE($8, is_active),
+           is_system_locked = $9,
            updated_at = NOW()
-       WHERE key = $8
+       WHERE key = $10
        RETURNING *`,
-      [name, category, nextSubject, nextBody, JSON.stringify(nextPlaceholders), is_active, nextSystemLocked, key]
+      [name, category, nextSubject, nextBody, nextSender, nextReplyTo, JSON.stringify(nextPlaceholders), is_active, nextSystemLocked, key]
     );
 
     const updatedTemplate = rows[0];
@@ -271,18 +275,25 @@ router.post('/templates/:key/publish', requirePermission('email.templates.edit')
       console.warn('[publish] Snapshot table archive warning (skipped):', verErr.message);
     }
 
+    const liveSender = existing.draft_sender_email || existing.sender_email;
+    const liveReplyTo = existing.draft_reply_to_email || existing.reply_to_email;
+
     // Promote draft → live and clear draft columns
     const { rows } = await client.query(
       `UPDATE email_templates
        SET subject_template = $1,
            body_html_template = $2,
+           sender_email = $3,
+           reply_to_email = $4,
            draft_subject_template = NULL,
            draft_body_html_template = NULL,
-           version = $3,
+           draft_sender_email = NULL,
+           draft_reply_to_email = NULL,
+           version = $5,
            updated_at = NOW()
-       WHERE key = $4
+       WHERE key = $6
        RETURNING *`,
-      [liveSubject, liveBody, nextVersion, key]
+      [liveSubject, liveBody, liveSender, liveReplyTo, nextVersion, key]
     );
 
     const publishedTemplate = rows[0];
