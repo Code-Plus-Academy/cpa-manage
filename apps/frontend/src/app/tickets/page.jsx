@@ -171,68 +171,13 @@ export default function StandaloneTicketsPage() {
           loadedCases = loadedCases.filter(c => c.type === 'email' || c.inbound_email || c.category === 'support');
         }
 
-        if (loadedCases.length === 0) {
-          // Fallback interactive mock cases if DB returned no rows for current view
-          const mockItems = activeViewMode === 'emails' ? [
-            {
-              id: 'CASE-EM-9001',
-              type: 'email',
-              category: 'support',
-              subject: 'Inquiry: Platform API Billing & Enterprise Invoice Download',
-              publisher_name: 'Sarah Jenkins',
-              reporter_email: 'sarah.jenkins@acme-corp.com',
-              status: 'open',
-              created_at: new Date(Date.now() - 3600000).toISOString(),
-              priority: 'high',
-              body_snippet: 'Hello Support Team, We need an itemized VAT invoice for our July 2026 enterprise subscription...'
-            },
-            {
-              id: 'CASE-EM-9002',
-              type: 'email',
-              category: 'support',
-              subject: 'Request for Institutional Partner Onboarding Call',
-              publisher_name: 'Prof. David Miller',
-              reporter_email: 'd.miller@stanford.edu',
-              status: 'pending',
-              created_at: new Date(Date.now() - 7200000).toISOString(),
-              priority: 'normal',
-              body_snippet: 'Dear Admissions Team, Our computer science department would like to verify our official domain credentials...'
-            }
-          ] : [
-            {
-              id: 'CASE-REP-1001',
-              type: 'report',
-              category: 'user_report',
-              subject: 'Flagged User Guidelines Violation: Repeated Spam in Q&A Forum',
-              publisher_name: 'Alex Vance',
-              reporter_email: 'alex.vance@codeplusacademy.in',
-              status: 'open',
-              created_at: new Date(Date.now() - 1800000).toISOString(),
-              priority: 'high',
-              body_snippet: 'User @dev_spammer_99 posted promotional affiliate links across 14 discussion threads.'
-            },
-            {
-              id: 'CASE-REP-1002',
-              type: 'report',
-              category: 'content_moderation',
-              subject: 'Copyright DMCA Takedown Notice — Video Tutorial #8841',
-              publisher_name: 'Legal Rights Holder',
-              reporter_email: 'dmca@techpublisher.com',
-              status: 'pending',
-              created_at: new Date(Date.now() - 5400000).toISOString(),
-              priority: 'urgent',
-              body_snippet: 'Notice of copyright infringement regarding proprietary code snippets in video course module #8841.'
-            }
-          ];
-          setTickets(mockItems);
-          setTotalCount(mockItems.length);
-          setTotalPages(1);
+        setTickets(loadedCases);
+        if (data.pagination) {
+          setTotalCount(data.pagination.total_count || loadedCases.length);
+          setTotalPages(Math.ceil((data.pagination.total_count || loadedCases.length) / 15));
         } else {
-          setTickets(loadedCases);
-          if (data.pagination) {
-            setTotalCount(data.pagination.total_count || loadedCases.length);
-            setTotalPages(Math.ceil((data.pagination.total_count || loadedCases.length) / 15));
-          }
+          setTotalCount(loadedCases.length);
+          setTotalPages(1);
         }
       }
     } catch (err) {

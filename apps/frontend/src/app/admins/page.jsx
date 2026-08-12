@@ -105,33 +105,7 @@ export default function AdminIAMPage() {
     try {
       const res = await apiFetch('/admin/admins');
       if (res.ok) {
-        const data = await res.json();
-        const loadedAdmins = data.admins || [];
-        if (loadedAdmins.length === 0) {
-          // Provide default admin accounts if DB returned no rows
-          setAdmins([
-            {
-              id: 'usr-root-01',
-              display_name: 'Dr. Alex Vance',
-              email: 'admin@codeplusacademy.in',
-              is_root: true,
-              status: 'active',
-              permissions: ['all_access'],
-              created_at: new Date().toISOString()
-            },
-            {
-              id: 'usr-wrk-02',
-              display_name: 'Sarah Connor',
-              email: 'sarah.connor@codeplusacademy.in',
-              is_root: false,
-              status: 'active',
-              permissions: ['support.view', 'email.templates.edit'],
-              created_at: new Date(Date.now() - 86400000).toISOString()
-            }
-          ]);
-        } else {
-          setAdmins(loadedAdmins);
-        }
+        setAdmins(data.admins || []);
       }
     } catch (err) {
       console.error('Failed to load admin list:', err);
