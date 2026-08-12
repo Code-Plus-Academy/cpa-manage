@@ -805,61 +805,63 @@ export default function HiringAdminDashboard() {
               </div>
             </div>
 
-            {/* Split 2-Column Editor Workspace */}
-            <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '20px' }}>
-              {/* Left Sidebar: Installed PolyCert Templates List */}
+            {/* Single Column Editor Workspace with Top Template Selector Bar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {/* Installed PolyCert Templates Top Selector Bar */}
               <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 <h3 style={{ fontSize: '13px', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <FileCode size={15} style={{ color: '#818cf8' }} /> Installed Templates ({polyCertStudioTemplates.length})
                 </h3>
 
                 {studioLoading && polyCertStudioTemplates.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: '#9ca3af', padding: '20px 0', textAlign: 'center' }}>Loading PolyCert templates...</div>
+                  <div style={{ fontSize: '13px', color: '#9ca3af', padding: '10px 0', textAlign: 'center' }}>Loading PolyCert templates...</div>
                 ) : (
-                  polyCertStudioTemplates.map((t) => {
-                    const isSelected = activeStudioTemplate?.filename === t.filename;
-                    return (
-                      <div
-                        key={t.filename}
-                        onClick={() => loadStudioTemplate(t.filename)}
-                        style={{
-                          padding: '12px', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s',
-                          background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.03)',
-                          border: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.06)'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '14px', fontWeight: '700', color: isSelected ? '#818cf8' : '#ffffff' }}>
-                            {t.name || t.filename}
-                          </span>
-                          {t.is_custom ? (
-                            <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Custom</span>
-                          ) : (
-                            <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Built-in</span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{t.filename}</div>
-
-                        {/* Detected Variable Badges */}
-                        {t.variables && t.variables.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
-                            {t.variables.slice(0, 4).map(v => (
-                              <span key={v} style={{ fontSize: '9px', background: 'rgba(255,255,255,0.06)', color: '#a5b4fc', padding: '1px 5px', borderRadius: '3px', fontFamily: 'monospace' }}>
-                                {`{{ ${v} }}`}
-                              </span>
-                            ))}
-                            {t.variables.length > 4 && (
-                              <span style={{ fontSize: '9px', color: '#6b7280' }}>+{t.variables.length - 4} more</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '12px' }}>
+                    {polyCertStudioTemplates.map((t) => {
+                      const isSelected = activeStudioTemplate?.filename === t.filename;
+                      return (
+                        <div
+                          key={t.filename}
+                          onClick={() => loadStudioTemplate(t.filename)}
+                          style={{
+                            padding: '12px', borderRadius: '10px', cursor: 'pointer', transition: 'all 0.2s',
+                            background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.03)',
+                            border: isSelected ? '1px solid #6366f1' : '1px solid rgba(255,255,255,0.06)'
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: '700', color: isSelected ? '#818cf8' : '#ffffff' }}>
+                              {t.name || t.filename}
+                            </span>
+                            {t.is_custom ? (
+                              <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', color: '#fbbf24', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Custom</span>
+                            ) : (
+                              <span style={{ fontSize: '10px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>Built-in</span>
                             )}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })
+                          <div style={{ fontSize: '11px', color: '#9ca3af', fontFamily: 'monospace' }}>{t.filename}</div>
+
+                          {/* Detected Variable Badges */}
+                          {t.variables && t.variables.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '8px' }}>
+                              {t.variables.slice(0, 3).map(v => (
+                                <span key={v} style={{ fontSize: '9px', background: 'rgba(255,255,255,0.06)', color: '#a5b4fc', padding: '1px 5px', borderRadius: '3px', fontFamily: 'monospace' }}>
+                                  {`{{ ${v} }}`}
+                                </span>
+                              ))}
+                              {t.variables.length > 3 && (
+                                <span style={{ fontSize: '9px', color: '#6b7280' }}>+{t.variables.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
-              {/* Right Column: Code Editor & Live Preview Split */}
+              {/* Code Editor & Live Preview Workspace */}
               <div style={{ background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {activeStudioTemplate ? (
                   <>

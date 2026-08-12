@@ -47,13 +47,28 @@ router.get('/templates/:key', requirePermission.any(['email.templates.edit', 'em
   }
 });
 
-const { compileAndValidateTemplate } = require('../services/emailTemplateCompiler');
+function extractPlaceholdersFromText(subjectTpl = '', bodyTpl = '', existing = []) {
+  const set = new Set(Array.isArray(existing) ? existing : []);
+  const regex = /\{\{\s*[#\/]?(?:if|unless|each)?\s*([a-zA-Z0-9_.]+)/g;
+  const text = `${subjectTpl || ''} ${bodyTpl || ''}`;
+  const ignored = new Set(['if', 'unless', 'each', 'with', 'else', 'this']);
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const v = match[1];
+    if (v && !ignored.has(v)) {
+      set.add(v);
+    }
+  }
+  return Array.from(set);
+}
 
 // POST /admin/email/templates
 router.post('/templates', requirePermission('email.templates.edit'), async (req, res, next) => {
   const client = await getClient();
   try {
     const { key, name, category, subject_template, body_html_template, sender_email_id = null, available_placeholders = [], is_active = true, is_system_locked = false } = req.body;
+
+    const mergedPlaceholders = extractPlaceholdersFromText(subject_template, body_html_template, available_placeholders);
 
     if (!key || !name || !category || !subject_template || !body_html_template) {
       return next(new AppError('VALIDATION_ERROR', 400, {
@@ -79,7 +94,7 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
 
     // Compile-time pre-validation on save
     try {
-      compileAndValidateTemplate({ subject_template, body_html_template, available_placeholders });
+      compileAndValidateTemplate({ subject_template, body_html_template, available_placeholders: mergedPlaceholders });
     } catch (valErr) {
       return next(new AppError('VALIDATION_ERROR', 400, null, valErr.message));
     }
@@ -90,7 +105,7 @@ router.post('/templates', requirePermission('email.templates.edit'), async (req,
       `INSERT INTO email_templates (key, name, category, subject_template, body_html_template, draft_subject_template, draft_body_html_template, sender_email_id, available_placeholders, is_system_locked, is_active, created_by)
        VALUES ($1, $2, $3, $4, $5, $4, $5, $6, $7::jsonb, $8, $9, $10)
        RETURNING *`,
-      [key.trim(), name.trim(), category, subject_template, body_html_template, sender_email_id || null, JSON.stringify(available_placeholders), !!is_system_locked, is_active, req.adminUser.id]
+      [key.trim(), name.trim(), category, subject_template, body_html_template, sender_email_id || null, JSON.stringify(mergedPlaceholders), !!is_system_locked, is_active, req.adminUser.id]
     );
 
     const newTemplate = rows[0];
@@ -169,7 +184,8 @@ router.patch('/templates/:key', requirePermission('email.templates.edit'), async
     const nextSender = sender_email !== undefined ? sender_email : (existing.draft_sender_email || existing.sender_email);
     const nextReplyTo = reply_to_email !== undefined ? reply_to_email : (existing.draft_reply_to_email || existing.reply_to_email);
     const nextSenderEmailId = sender_email_id !== undefined ? sender_email_id : existing.sender_email_id;
-    const nextPlaceholders = available_placeholders !== undefined ? available_placeholders : (existing.available_placeholders || []);
+    const basePlaceholders = available_placeholders !== undefined ? available_placeholders : (existing.available_placeholders || []);
+    const nextPlaceholders = extractPlaceholdersFromText(nextSubject, nextBody, basePlaceholders);
     const nextSystemLocked = is_system_locked !== undefined ? !!is_system_locked : existing.is_system_locked;
 
     // Compile-time validation

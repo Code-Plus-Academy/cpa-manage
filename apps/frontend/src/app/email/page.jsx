@@ -94,15 +94,8 @@ export default function StandaloneEmailPage() {
       const vars = Array.from(found);
       setDetectedFields(vars);
 
-      // In Create-New flow (editingTemplate is null), disable unsupported variable warnings
-      if (!editingTemplate || !Array.isArray(editingTemplate.available_placeholders)) {
-        setInvalidFields([]);
-        return;
-      }
-
-      const allowedSet = new Set(editingTemplate.available_placeholders);
-      const invalid = vars.filter(v => !allowedSet.has(v));
-      setInvalidFields(invalid);
+      // All variables typed in the template text are auto-recognized as valid placeholders
+      setInvalidFields([]);
     }, 300);
 
     return () => clearTimeout(timer);
@@ -225,15 +218,8 @@ export default function StandaloneEmailPage() {
       : `/admin/email/templates`;
     const method = isEdit ? 'PATCH' : 'POST';
 
-    let availablePlaceholders = detectedFields.length > 0 ? detectedFields : [];
-    if (availablePlaceholders.length === 0) {
-      try {
-        const parsed = JSON.parse(mockPayloadJson);
-        availablePlaceholders = Object.keys(parsed);
-      } catch (e) {
-        availablePlaceholders = ['display_name', 'name', 'otp_code', 'position'];
-      }
-    }
+    const existingPlaceholders = editingTemplate?.available_placeholders || [];
+    const availablePlaceholders = Array.from(new Set([...existingPlaceholders, ...detectedFields]));
 
     const payload = {
       name: templateName,
@@ -1024,7 +1010,7 @@ export default function StandaloneEmailPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label style={{ fontSize: '12px', color: tokens.colors.textMuted }}>HTML Body (Handlebars Auto-Escaped XSS Safe)</label>
                     <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                      {['{{display_name}}', '{{otp_code}}', '{{position}}', '{{startdate}}', '{{friend_name}}', '{{#each suggested_friends}}', '{{#if condition}}'].map(tag => (
+                      {['{{position}}', '{{organization_name}}', '{{name}}', '{{department}}', '{{holding_company}}', '{{startdate}}', '{{duration}}', '{{salary}}', '{{offer_deadline}}', '{{offer_pdf_link}}', '{{serial_no}}', '{{signatory}}', '{{signatory_role}}'].map(tag => (
                         <button
                           key={tag}
                           type="button"

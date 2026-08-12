@@ -80,8 +80,13 @@ const mockTemplates = [
     name: 'Hiring Offer Letter',
     category: 'hiring',
     subject_template: 'Offer Letter for {{position}} at Code+ Academy',
-    body_html_template: '<div>Dear {{name}}, Offer for {{position}}</div>',
-    available_placeholders: ['name', 'position', 'startdate'],
+    body_html_template: '<div style="font-family: Arial, sans-serif; color: #1e293b; line-height: 1.6; max-width: 650px;"><h2 style="color: #10b981;">Offer of Employment</h2><p>Dear <strong>{{name}}</strong>,</p><p>We are thrilled to offer you the position of <strong>{{position}}</strong> in the <strong>{{department}}</strong> team at {{organization_name}} ({{holding_company}}).</p><div style="background-color: #f0fdf4; border-left: 4px solid #10b981; padding: 16px; margin: 16px 0; border-radius: 4px;"><strong>Start Date:</strong> {{startdate}}<br/><strong>Duration:</strong> {{duration}}<br/><strong>Annual Base Compensation:</strong> {{salary}}<br/><strong>Offer Expiration:</strong> {{offer_deadline}}<br/><strong>Serial No:</strong> {{serial_no}}</div><p>Signed by <strong>{{signatory}}</strong> ({{signatory_role}}).</p><p><a href="{{offer_pdf_link}}" style="background: #10b981; color: #fff; padding: 12px 20px; border-radius: 6px; text-decoration: none; font-weight: bold; display: inline-block;">View & Download Offer PDF</a></p></div>',
+    available_placeholders: [
+      'position', 'organization_name', 'name', 'department', 'holding_company',
+      'startdate', 'duration', 'salary', 'offer_deadline', 'offer_pdf_link',
+      'serial_no', 'signatory', 'signatory_role',
+      'role', 'company_name', 'start_date', 'compensation', 'deadline', 'pdf_url', 'certificate_pdf_link', 'serial_number', 'signature_text'
+    ],
     is_system_locked: false,
     is_active: true,
     version: 1,

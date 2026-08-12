@@ -16,6 +16,9 @@ export default function StandaloneTicketsPage() {
   const [adminUser, setAdminUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const searchView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null;
+  const [activeViewMode, setActiveViewMode] = useState(searchView === 'emails' ? 'emails' : 'reports');
+
   // Filters & Pagination
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -27,6 +30,11 @@ export default function StandaloneTicketsPage() {
   // Data states
   const [tickets, setTickets] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
+
+  useEffect(() => {
+    if (searchView === 'emails') setActiveViewMode('emails');
+    else if (searchView === 'reports') setActiveViewMode('reports');
+  }, [searchView]);
 
   // Detail Modal / Overlay State (2-column layout)
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -228,8 +236,12 @@ export default function StandaloneTicketsPage() {
     }
   };
 
-  // Client-side search filtering
+  // Client-side search and view mode filtering
   const filteredTickets = tickets.filter(t => {
+    const isEmailItem = Boolean(t.target_mailbox) || t.source_surface === 'email' || (t.category && String(t.category).toLowerCase().includes('email')) || (t.type && String(t.type).toLowerCase().includes('email'));
+    if (activeViewMode === 'emails' && !isEmailItem) return false;
+    if (activeViewMode === 'reports' && isEmailItem) return false;
+
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -275,6 +287,51 @@ export default function StandaloneTicketsPage() {
           >
             <RefreshCw size={14} className={dataLoading ? 'animate-spin' : ''} />
             Refresh
+          </button>
+        </div>
+
+        {/* View Mode Sub-Tabs */}
+        <div style={{ display: 'flex', gap: '8px', borderBottom: `1px solid ${tokens.colors.borderSubtle}`, paddingBottom: '12px' }}>
+          <button
+            onClick={() => { setActiveViewMode('reports'); router.push('/tickets?view=reports'); }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: activeViewMode === 'reports' ? `1px solid ${tokens.colors.primary}` : `1px solid ${tokens.colors.borderSubtle}`,
+              backgroundColor: activeViewMode === 'reports' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+              color: activeViewMode === 'reports' ? '#818cf8' : tokens.colors.textMuted,
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Ticket size={16} />
+            📑 Platform User Reports
+          </button>
+
+          <button
+            onClick={() => { setActiveViewMode('emails'); router.push('/tickets?view=emails'); }}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: activeViewMode === 'emails' ? `1px solid ${tokens.colors.primary}` : `1px solid ${tokens.colors.borderSubtle}`,
+              backgroundColor: activeViewMode === 'emails' ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+              color: activeViewMode === 'emails' ? '#818cf8' : tokens.colors.textMuted,
+              fontSize: '13px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            <Mail size={16} />
+            📩 Emails Received (Resend Inbox)
           </button>
         </div>
 

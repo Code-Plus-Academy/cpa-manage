@@ -182,20 +182,60 @@ async function triggerDocumentGeneration(applicationId, docDetails = {}) {
         const adminEmail = docDetails.admin_email || process.env.ADMIN_NOTIFY_EMAIL || 'admin@codeplusacademy.in';
         const serialNo = docDetails.serial_number || `${(isCertificate ? 'CERT' : 'OFFER')}-${new Date().getFullYear()}-000001`;
 
+        const candName = app.candidate_name || docDetails.name || docDetails.candidate_name || 'Candidate';
+        const candEmail = app.candidate_email || docDetails.email || docDetails.candidate_email || '';
+        const posTitle = docDetails.offer_title || docDetails.role || docDetails.role_title || docDetails.position || app.position_title || 'Software Developer';
+        const comp = docDetails.compensation || docDetails.salary || 'Standard Rate';
+        const dept = docDetails.organization_name || docDetails.company_name || docDetails.department || 'Code Plus Academy';
+        const startDate = docDetails.start_date || docDetails.date || docDetails.startdate || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        const expiryDate = docDetails.deadline || docDetails.offer_deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+        const signatoryName = docDetails.signatory || docDetails.manager_name || docDetails.signature_text || 'Dr. Alex Vance';
+        const signatoryTitle = docDetails.signatory_role || docDetails.signatory_title || 'Director of Engineering';
+
         const emailPayload = {
-          name: app.candidate_name,
-          position: docDetails.offer_title || docDetails.role || app.position_title,
-          department: docDetails.organization_name || 'Code Plus Academy',
+          // Candidate & Personal Details
+          name: candName,
+          display_name: candName,
+          candidate_name: candName,
+          email: candEmail,
+          candidate_email: candEmail,
+
+          // Position & Role Details
+          position: posTitle,
+          role: posTitle,
+          role_title: posTitle,
+          offer_title: posTitle,
+          position_title: posTitle,
+
+          // Department & Company Details
+          department: dept,
+          company_name: dept,
+          organization_name: dept,
           holding_company: docDetails.holding_company || 'Code Plus Education',
+
+          // Compensation & Expiration Dates
+          salary: comp,
+          compensation: comp,
+          startdate: startDate,
+          start_date: startDate,
+          date: startDate,
+          offer_deadline: expiryDate,
+          deadline: expiryDate,
           duration: docDetails.duration || '6 Months',
-          startdate: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-          salary: docDetails.compensation || 'Standard Rate',
-          offer_deadline: docDetails.deadline || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+
+          // Generated PDF Links & Tracking Serials
           offer_pdf_link: generatedPdfUrl,
           certificate_pdf_link: generatedPdfUrl,
           pdf_url: generatedPdfUrl,
           serial_no: serialNo,
-          date: docDetails.date || new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+          serial_number: serialNo,
+
+          // Signatory & Approval Details
+          signatory: signatoryName,
+          signatory_role: signatoryTitle,
+          signatory_title: signatoryTitle,
+          signature_text: signatoryName,
+
           ...docDetails
         };
 

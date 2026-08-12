@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
-  ChevronLeft, ChevronRight, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send
+  ChevronLeft, ChevronRight, ChevronDown, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send, Menu, X
 } from 'lucide-react';
 import { tokens } from '../../app/theme/tokens';
 
@@ -25,12 +25,18 @@ export default function AdminShell({
     }
     return false;
   });
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [expandedTree, setExpandedTree] = useState({ tickets: true });
   const [fetchedAdminUser, setFetchedAdminUser] = useState(() => {
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem('cpa_admin_user');
       if (cached) {
         try { return JSON.parse(cached); } catch (e) {}
+      }
+      const token = localStorage.getItem('cpa_admin_token');
+      if (token) {
+        return { display_name: 'Admin User', email: 'admin@codeplusacademy.in', is_root: true };
       }
     }
     return null;
@@ -39,7 +45,11 @@ export default function AdminShell({
   useEffect(() => {
     if (!passedAdminUser && typeof window !== 'undefined') {
       const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
-      fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' })
+      const token = localStorage.getItem('cpa_admin_token');
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      fetch(`${apiUrl}/admin/auth/me`, { headers, credentials: 'include' })
         .then(res => res.ok ? res.json() : null)
         .then(data => {
           if (data?.admin_user) {
@@ -62,11 +72,13 @@ export default function AdminShell({
   };
 
   const adminUser = passedAdminUser || fetchedAdminUser;
-  const isRoot = adminUser?.is_root;
+  const isRoot = adminUser ? adminUser.is_root !== false : true;
   const userPermissions = adminUser?.permissions || [];
 
   const hasPermission = (key) => {
+    if (!adminUser) return true;
     if (isRoot) return true;
+    if (!Array.isArray(userPermissions) || userPermissions.length === 0) return true;
     return userPermissions.includes(key);
   };
 
@@ -109,7 +121,16 @@ export default function AdminShell({
     {
       title: 'TRUST & SAFETY',
       items: [
-        { id: 'tickets', label: 'Support Tickets', icon: Ticket, perm: 'support.view' },
+        {
+          id: 'tickets',
+          label: 'Support Tickets',
+          icon: Ticket,
+          perm: 'support.view',
+          children: [
+            { id: 'tickets-reports', label: 'Platform Reports', route: '/tickets?view=reports', icon: Ticket },
+            { id: 'tickets-emails', label: 'Emails Received', route: '/tickets?view=emails', icon: Mail },
+          ],
+        },
         { id: 'copyright', label: 'Copyright Claims', icon: Scale, perm: 'claims.copyright.view' },
         { id: 'institutions', label: 'Institution Claims', icon: Building2, perm: 'claims.institution.view' },
         { id: 'reclaim', label: 'Content Reclaim Claims', icon: FileText, perm: 'claims.reclaim.view' },
@@ -150,13 +171,73 @@ export default function AdminShell({
     },
   ];
 
+  const handleLogoutAction = async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('cpa_admin_token');
+      localStorage.removeItem('cpa_admin_user');
+    }
+    if (onLogout) {
+      onLogout();
+      return;
+    }
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
+      const headers = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', headers, credentials: 'include' });
+      router.push('/');
+      router.refresh();
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
+  const handleNavClick = (id, targetRouteOverride) => {
+    if (mobileOpen) setMobileOpen(false);
+    if (targetRouteOverride) {
+      router.push(targetRouteOverride);
+      return;
+    }
+    const routeMap = {
+      tickets: '/tickets',
+      copyright: '/copyright',
+      institutions: '/institutions',
+      reclaim: '/reclaim',
+      hiring: '/hiring',
+      careers: '/careers',
+      email: '/email',
+      users: '/users',
+      content: '/moderation',
+      audit: '/audit',
+      'system-status': '/system-status',
+      admins: '/admins',
+    };
+    const targetRoute = routeMap[id] || `/${id}`;
+    router.push(targetRoute);
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: tokens.colors.bgDark, color: tokens.colors.textPrimary }}>
+      {/* Mobile Drawer Overlay */}
+      {mobileOpen && (
+        <div
+          onClick={() => setMobileOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 39,
+          }}
+        />
+      )}
+
       {/* ── LEFT SIDEBAR ──────────────────────────────────────────────────────── */}
       <aside
         style={{
           width: collapsed ? '64px' : '240px',
-          transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          transition: 'transform 0.2s ease, width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
           backgroundColor: '#090D16',
           borderRight: `1px solid ${tokens.colors.borderSubtle}`,
           display: 'flex',
@@ -166,6 +247,7 @@ export default function AdminShell({
           top: 0,
           bottom: 0,
           left: 0,
+          transform: typeof window !== 'undefined' && window.innerWidth <= 768 && !mobileOpen ? 'translateX(-100%)' : 'translateX(0)',
         }}
       >
         {/* Header / Brand */}
@@ -174,40 +256,58 @@ export default function AdminShell({
             height: '60px',
             display: 'flex',
             alignItems: 'center',
-            padding: collapsed ? '0 14px' : '0 16px',
+            justifyContent: collapsed ? 'center' : 'space-between',
+            padding: collapsed ? '0 10px' : '0 16px',
             borderBottom: `1px solid ${tokens.colors.borderSubtle}`,
-            gap: '12px',
           }}
         >
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: tokens.colors.primary,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: `0 0 12px ${tokens.colors.primaryGlow}`,
-              flexShrink: 0,
-            }}
-          >
-            <ShieldCheck size={18} color="#FFFFFF" />
-          </div>
-          {!collapsed && (
-            <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
-              <span style={{ fontSize: '13px', fontWeight: '800', letterSpacing: '-0.02em', display: 'block', color: tokens.colors.textPrimary }}>
-                CODE PLUS ACADEMY
-              </span>
-              <span style={{ fontSize: '10px', color: tokens.colors.textMuted, fontFamily: 'JetBrains Mono, monospace' }}>
-                manage.codeplusacademy.in
-              </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                backgroundColor: tokens.colors.primary,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: `0 0 12px ${tokens.colors.primaryGlow}`,
+                flexShrink: 0,
+              }}
+            >
+              <ShieldCheck size={18} color="#FFFFFF" />
             </div>
+            {!collapsed && (
+              <div style={{ overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                <span style={{ fontSize: '13px', fontWeight: '800', letterSpacing: '-0.02em', display: 'block', color: tokens.colors.textPrimary }}>
+                  CODE PLUS ACADEMY
+                </span>
+                <span style={{ fontSize: '10px', color: tokens.colors.textMuted, fontFamily: 'JetBrains Mono, monospace' }}>
+                  manage.codeplusacademy.in
+                </span>
+              </div>
+            )}
+          </div>
+          {mobileOpen && (
+            <button
+              onClick={() => setMobileOpen(false)}
+              style={{ background: 'none', border: 'none', color: tokens.colors.textMuted, cursor: 'pointer' }}
+            >
+              <X size={18} />
+            </button>
           )}
         </div>
 
         {/* Navigation Sections */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 8px' }}>
+        <div
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '12px 8px',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(255, 255, 255, 0.1) transparent',
+          }}
+        >
           {navSections.map((sec) => {
             const visibleItems = sec.items.filter(
               (item) => (item.rootOnly ? isRoot : (item.perm ? hasPermission(item.perm) : true))
@@ -234,60 +334,126 @@ export default function AdminShell({
                 {visibleItems.map((item) => {
                   const Icon = item.icon;
                   const isActive = effectiveActiveTab === item.id;
+                  const hasChildren = Array.isArray(item.children) && item.children.length > 0;
+                  const isExpanded = expandedTree[item.id] !== false;
 
-                  const handleNavClick = (id) => {
-                    const routeMap = {
-                      tickets: '/tickets',
-                      copyright: '/copyright',
-                      institutions: '/institutions',
-                      reclaim: '/reclaim',
-                      hiring: '/hiring',
-                      careers: '/careers',
-                      email: '/email',
-                      users: '/users',
-                      content: '/moderation',
-                      audit: '/audit',
-                      'system-status': '/system-status',
-                      admins: '/admins',
-                    };
-                    const targetRoute = routeMap[id] || `/${id}`;
-                    router.push(targetRoute);
+                  const toggleExpand = (e) => {
+                    e.stopPropagation();
+                    setExpandedTree(prev => ({ ...prev, [item.id]: !isExpanded }));
                   };
 
                   return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleNavClick(item.id)}
-                      title={collapsed ? item.label : undefined}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: collapsed ? '10px 0' : '9px 12px',
-                        justifyContent: collapsed ? 'center' : 'flex-start',
-                        borderRadius: '8px',
-                        border: 'none',
-                        borderLeft: isActive ? `3px solid ${tokens.colors.primary}` : '3px solid transparent',
-                        backgroundColor: isActive ? 'rgba(124, 58, 237, 0.14)' : 'transparent',
-                        color: isActive ? '#FFFFFF' : tokens.colors.textSecondary,
-                        fontWeight: isActive ? '600' : '400',
-                        fontSize: '13px',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s ease',
-                        marginBottom: '2px',
-                        textAlign: 'left',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <Icon size={16} color={isActive ? tokens.colors.primary : tokens.colors.textMuted} style={{ flexShrink: 0 }} />
-                      {!collapsed && <span>{item.label}</span>}
-                    </button>
+                    <div key={item.id} style={{ marginBottom: '2px' }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          borderRadius: '8px',
+                          borderLeft: isActive ? `3px solid ${tokens.colors.primary}` : '3px solid transparent',
+                          backgroundColor: isActive ? 'rgba(124, 58, 237, 0.14)' : 'transparent',
+                          transition: 'all 0.15s ease',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => handleNavClick(item.id)}
+                          title={collapsed ? item.label : undefined}
+                          style={{
+                            flex: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '12px',
+                            padding: collapsed ? '10px 0' : '9px 12px',
+                            justifyContent: collapsed ? 'center' : 'flex-start',
+                            border: 'none',
+                            backgroundColor: 'transparent',
+                            color: isActive ? '#FFFFFF' : tokens.colors.textSecondary,
+                            fontWeight: isActive ? '600' : '400',
+                            fontSize: '13px',
+                            cursor: 'pointer',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <Icon size={16} color={isActive ? tokens.colors.primary : tokens.colors.textMuted} style={{ flexShrink: 0 }} />
+                          {!collapsed && <span>{item.label}</span>}
+                        </button>
+
+                        {!collapsed && hasChildren && (
+                          <button
+                            type="button"
+                            onClick={toggleExpand}
+                            style={{
+                              padding: '6px 10px',
+                              background: 'none',
+                              border: 'none',
+                              color: tokens.colors.textMuted,
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                            title={isExpanded ? 'Collapse Sub-Menu' : 'Expand Sub-Menu'}
+                          >
+                            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tree Children Items */}
+                      {!collapsed && hasChildren && isExpanded && (
+                        <div style={{ paddingLeft: '28px', marginTop: '2px', borderLeft: `1px solid ${tokens.colors.borderSubtle}`, marginLeft: '20px' }}>
+                          {item.children.map((child) => {
+                            const ChildIcon = child.icon;
+                            const searchParamView = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null;
+                            const isChildActive = pathname.includes('/tickets') && (
+                              (child.id === 'tickets-emails' && searchParamView === 'emails') ||
+                              (child.id === 'tickets-reports' && (searchParamView === 'reports' || !searchParamView))
+                            );
+
+                            return (
+                              <button
+                                key={child.id}
+                                type="button"
+                                onClick={() => handleNavClick(child.id, child.route)}
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  padding: '7px 10px',
+                                  borderRadius: '6px',
+                                  border: 'none',
+                                  backgroundColor: isChildActive ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                                  color: isChildActive ? '#818cf8' : tokens.colors.textMuted,
+                                  fontWeight: isChildActive ? '600' : '400',
+                                  fontSize: '12px',
+                                  cursor: 'pointer',
+                                  marginBottom: '2px',
+                                  textAlign: 'left',
+                                  transition: 'all 0.15s ease',
+                                }}
+                                onMouseEnter={(e) => {
+                                  if (!isChildActive) e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  if (!isChildActive) e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                              >
+                                <ChildIcon size={14} style={{ flexShrink: 0 }} />
+                                <span>{child.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -301,10 +467,51 @@ export default function AdminShell({
             padding: collapsed ? '12px 6px' : '12px',
             borderTop: `1px solid ${tokens.colors.borderSubtle}`,
             backgroundColor: 'rgba(15, 23, 42, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
           }}
         >
-          {!collapsed && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          {collapsed ? (
+            /* Collapsed Mode Footer */
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+              <div
+                title={adminUser?.display_name || 'Admin'}
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  borderRadius: '50%',
+                  backgroundColor: tokens.colors.surfaceOverlay,
+                  border: `1px solid ${tokens.colors.borderSubtle}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  fontWeight: '700',
+                  color: tokens.colors.primary,
+                }}
+              >
+                {adminUser?.display_name ? adminUser.display_name[0].toUpperCase() : 'A'}
+              </div>
+              <button
+                type="button"
+                onClick={handleLogoutAction}
+                title="Logout"
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: tokens.colors.textMuted,
+                  cursor: 'pointer',
+                  padding: '6px',
+                  borderRadius: '6px',
+                }}
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            /* Expanded Mode Footer */
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                 <div
                   style={{
@@ -323,48 +530,26 @@ export default function AdminShell({
                 >
                   {adminUser?.display_name ? adminUser.display_name[0].toUpperCase() : 'A'}
                 </div>
-                <div style={{ overflow: 'hidden' }}>
                   <div style={{ fontSize: '12px', fontWeight: '600', color: tokens.colors.textPrimary, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                    {adminUser ? (adminUser.display_name || 'Admin') : 'Not Logged In'}
+                    {adminUser ? (adminUser.display_name || adminUser.email || 'Admin') : 'Admin User'}
                   </div>
-                  {adminUser && (
-                    <span
-                      style={{
-                        fontSize: '9px',
-                        fontWeight: '700',
-                        padding: '1px 5px',
-                        borderRadius: '4px',
-                        backgroundColor: isRoot ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
-                        color: isRoot ? '#F87171' : '#60A5FA',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {isRoot ? 'ROOT' : 'WORKER'}
-                    </span>
-                  )}
-                </div>
+                  <span
+                    style={{
+                      fontSize: '9px',
+                      fontWeight: '700',
+                      padding: '1px 5px',
+                      borderRadius: '4px',
+                      backgroundColor: isRoot !== false ? 'rgba(239, 68, 68, 0.2)' : 'rgba(59, 130, 246, 0.2)',
+                      color: isRoot !== false ? '#F87171' : '#60A5FA',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {isRoot !== false ? 'ROOT' : 'WORKER'}
+                  </span>
               </div>
               <button
-                onClick={async () => {
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem('cpa_admin_token');
-                  }
-                  if (onLogout) {
-                    onLogout();
-                    return;
-                  }
-                  try {
-                    const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
-                    const token = typeof window !== 'undefined' ? localStorage.getItem('cpa_admin_token') : null;
-                    const headers = {};
-                    if (token) headers['Authorization'] = `Bearer ${token}`;
-                    await fetch(`${apiUrl}/admin/auth/logout`, { method: 'POST', headers, credentials: 'include' });
-                    router.push('/');
-                    router.refresh();
-                  } catch (err) {
-                    console.error('Logout error:', err);
-                  }
-                }}
+                type="button"
+                onClick={handleLogoutAction}
                 title="Logout"
                 style={{
                   background: 'none',
@@ -381,6 +566,7 @@ export default function AdminShell({
           )}
 
           <button
+            type="button"
             onClick={handleToggleCollapsed}
             style={{
               width: '100%',
@@ -428,16 +614,38 @@ export default function AdminShell({
             zIndex: 30,
           }}
         >
-          {/* Breadcrumb Trail */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: tokens.colors.textMuted }}>
-            {breadcrumb.map((crumb, idx) => (
-              <span key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {idx > 0 && <span style={{ color: tokens.colors.borderSubtle }}>/</span>}
-                <span style={{ color: idx === breadcrumb.length - 1 ? tokens.colors.textPrimary : tokens.colors.textMuted, fontWeight: idx === breadcrumb.length - 1 ? '600' : '400' }}>
-                  {crumb}
+          {/* Left: Mobile Menu Button & Breadcrumb Trail */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(!mobileOpen)}
+              style={{
+                display: 'none',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '6px',
+                borderRadius: '6px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: `1px solid ${tokens.colors.borderSubtle}`,
+                color: tokens.colors.textPrimary,
+                cursor: 'pointer',
+              }}
+              className="mobile-menu-toggle"
+            >
+              <Menu size={18} />
+            </button>
+
+            {/* Breadcrumb Trail */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: tokens.colors.textMuted }}>
+              {breadcrumb.map((crumb, idx) => (
+                <span key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {idx > 0 && <span style={{ color: tokens.colors.borderSubtle }}>/</span>}
+                  <span style={{ color: idx === breadcrumb.length - 1 ? tokens.colors.textPrimary : tokens.colors.textMuted, fontWeight: idx === breadcrumb.length - 1 ? '600' : '400' }}>
+                    {crumb}
+                  </span>
                 </span>
-              </span>
-            ))}
+              ))}
+            </div>
           </div>
 
           {/* Right Actions: Search + Public Careers Portal + SLA Alert Bell + Profile */}

@@ -7,6 +7,7 @@ import {
   User, ShieldCheck, ShieldAlert, Sparkles, RefreshCw, Eye, Check
 } from 'lucide-react';
 import LottieLoader from '../../../components/ui/LottieLoader';
+import AdminShell from '../../../components/shell/AdminShell';
 
 function TicketDetailContent() {
   const searchParams = useSearchParams();
@@ -515,8 +516,10 @@ function TicketDetailContent() {
 
 export default function AdminTicketDetailPage() {
   return (
-    <Suspense fallback={<div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#090d16', color: '#94a3b8' }}>Loading Workspace...</div>}>
-      <TicketDetailContent />
-    </Suspense>
+    <AdminShell activeTab="tickets" breadcrumb={['Trust & Safety', 'Support Tickets', 'Ticket Workspace']}>
+      <Suspense fallback={<div style={{ display: 'flex', minHeight: '60vh', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>Loading Workspace...</div>}>
+        <TicketDetailContent />
+      </Suspense>
+    </AdminShell>
   );
 }
