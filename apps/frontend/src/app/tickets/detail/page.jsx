@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import LottieLoader from '../../../components/ui/LottieLoader';
 import AdminShell from '../../../components/shell/AdminShell';
+import { apiFetch } from '../../../lib/apiClient';
 
 function TicketDetailContent() {
   const searchParams = useSearchParams();
@@ -37,8 +38,6 @@ function TicketDetailContent() {
   const [issueStrike, setIssueStrike] = useState(false);
   const [executingAction, setExecutingAction] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
-
   useEffect(() => {
     if (ticketId) {
       loadTicketDetails();
@@ -63,7 +62,7 @@ function TicketDetailContent() {
 
   const loadTicketDetails = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticketId}`, { credentials: 'include' });
+      const res = await apiFetch(`/admin/cases/${ticketId}`);
       if (!res.ok) throw new Error('Ticket not found or permission denied.');
       const data = await res.json();
       setTicket(data.ticket);
@@ -79,7 +78,7 @@ function TicketDetailContent() {
 
   const loadMessagesAndLock = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticketId}/messages`, { credentials: 'include' });
+      const res = await apiFetch(`/admin/cases/${ticketId}/messages`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages || []);
@@ -92,7 +91,7 @@ function TicketDetailContent() {
 
   const loadSenderEmails = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/sender-emails`, { credentials: 'include' });
+      const res = await apiFetch('/admin/sender-emails');
       if (res.ok) {
         const data = await res.json();
         const senders = data.sender_emails || [];
@@ -111,18 +110,16 @@ function TicketDetailContent() {
 
   const acquireSoftLock = async () => {
     try {
-      await fetch(`${apiUrl}/admin/cases/${ticketId}/lock`, {
+      await apiFetch(`/admin/cases/${ticketId}/lock`, {
         method: 'POST',
-        credentials: 'include',
       });
     } catch (e) {}
   };
 
   const releaseSoftLock = async () => {
     try {
-      await fetch(`${apiUrl}/admin/cases/${ticketId}/lock`, {
+      await apiFetch(`/admin/cases/${ticketId}/lock`, {
         method: 'DELETE',
-        credentials: 'include',
       });
     } catch (e) {}
   };
@@ -132,7 +129,7 @@ function TicketDetailContent() {
     setSendingReply(true);
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticketId}/reply`, {
+      const res = await apiFetch(`/admin/cases/${ticketId}/reply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -140,7 +137,6 @@ function TicketDetailContent() {
           sender_email: selectedSenderEmail,
           status_action: statusAction,
         }),
-        credentials: 'include',
       });
 
       const data = await res.json();
@@ -165,7 +161,7 @@ function TicketDetailContent() {
     setExecutingAction(true);
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticketId}/action`, {
+      const res = await apiFetch(`/admin/cases/${ticketId}/action`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -173,7 +169,6 @@ function TicketDetailContent() {
           reason: reason.trim(),
           issue_strike: issueStrike,
         }),
-        credentials: 'include',
       });
 
       const data = await res.json();

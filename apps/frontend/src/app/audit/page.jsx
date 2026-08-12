@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FileText, ArrowLeft, ShieldCheck, Activity } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function AdminAuditPage() {
   const router = useRouter();
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
 
   useEffect(() => {
     loadAuditLogs();
@@ -18,7 +17,7 @@ export default function AdminAuditPage() {
 
   const loadAuditLogs = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/audit`, { credentials: 'include' });
+      const res = await apiFetch('/admin/audit');
       if (res.ok) {
         const data = await res.json();
         setLogs(data.logs || []);

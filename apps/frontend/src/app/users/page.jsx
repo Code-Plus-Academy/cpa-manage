@@ -6,6 +6,7 @@ import { UserX, Search, RefreshCw, AlertTriangle, ShieldAlert, Ban, Clock, X } f
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
 import { tokens } from '../theme/tokens';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function StandaloneUsersPage() {
   const router = useRouter();
@@ -21,21 +22,14 @@ export default function StandaloneUsersPage() {
   const [suspendedUntil, setSuspendedUntil] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
-
   useEffect(() => {
     checkAuthStatus();
+    loadUsers();
   }, []);
-
-  useEffect(() => {
-    if (adminUser) {
-      loadUsers();
-    }
-  }, [adminUser]);
 
   const checkAuthStatus = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
@@ -50,7 +44,7 @@ export default function StandaloneUsersPage() {
   const loadUsers = async () => {
     setDataLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/users`, { credentials: 'include' });
+      const res = await apiFetch('/admin/users');
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users || []);
@@ -68,7 +62,7 @@ export default function StandaloneUsersPage() {
     setSubmitting(true);
 
     const { type, userId } = activeModal;
-    let endpoint = `${apiUrl}/admin/users/${userId}/${type === 'strike' ? 'strikes' : type}`;
+    let endpoint = `/admin/users/${userId}/${type === 'strike' ? 'strikes' : type}`;
 
     const payload = { reason };
     if (type === 'suspend' && suspendedUntil) {
@@ -76,10 +70,9 @@ export default function StandaloneUsersPage() {
     }
 
     try {
-      const res = await fetch(endpoint, {
+      const res = await apiFetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
 

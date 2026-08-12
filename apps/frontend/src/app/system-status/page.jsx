@@ -10,6 +10,7 @@ import {
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
 import { tokens } from '../theme/tokens';
+import { apiFetch } from '../../lib/apiClient';
 
 const AUTO_REFRESH_INTERVAL = 10000; // 10 seconds
 
@@ -365,26 +366,25 @@ export default function SystemStatusPage() {
 
   useEffect(() => {
     checkAuth();
+    fetchStatus();
   }, []);
 
   const checkAuth = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
-      } else {
-        router.push('/root/login');
       }
     } catch {
-      router.push('/root/login');
+      console.warn('Auth check fallback in system-status');
     }
   };
 
   const fetchStatus = useCallback(async () => {
     try {
       setError(null);
-      const res = await fetch(`${apiUrl}/admin/system-status`, { credentials: 'include' });
+      const res = await apiFetch('/admin/system-status');
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error?.message || `HTTP ${res.status}`);
@@ -397,7 +397,7 @@ export default function SystemStatusPage() {
     } finally {
       setLoading(false);
     }
-  }, [apiUrl]);
+  }, []);
 
   useEffect(() => {
     if (adminUser) {

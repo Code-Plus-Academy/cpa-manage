@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Scale, ArrowLeft, Eye, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function AdminCopyrightPage() {
   const router = useRouter();
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
 
   useEffect(() => {
     loadClaims();
@@ -18,7 +17,7 @@ export default function AdminCopyrightPage() {
 
   const loadClaims = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/cases?type=copyright`, { credentials: 'include' });
+      const res = await apiFetch('/admin/cases?type=copyright');
       if (res.ok) {
         const data = await res.json();
         setClaims(data.cases || []);

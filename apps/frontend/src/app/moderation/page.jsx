@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { UserX, ArrowLeft, ShieldAlert, AlertTriangle, UserCheck } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function AdminModerationPage() {
   const router = useRouter();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
 
   useEffect(() => {
     loadUsers();
@@ -18,7 +17,7 @@ export default function AdminModerationPage() {
 
   const loadUsers = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/users/reports`, { credentials: 'include' });
+      const res = await apiFetch('/admin/users/reports');
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users || []);
@@ -34,11 +33,10 @@ export default function AdminModerationPage() {
     const reason = prompt('Reason for issuing strike:');
     if (!reason) return;
     try {
-      const res = await fetch(`${apiUrl}/admin/users/${userId}/strikes`, {
+      const res = await apiFetch(`/admin/users/${userId}/strikes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
-        credentials: 'include',
       });
       if (res.ok) alert('Strike issued successfully.');
     } catch (err) {

@@ -6,6 +6,7 @@ import { FileText, RefreshCw, Eye, ArrowRight, CheckCircle2, ShieldCheck, Clock,
 import AdminShell from '../../components/shell/AdminShell';
 import StatusPill from '../../components/ui/StatusPill';
 import { tokens } from '../theme/tokens';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function StandaloneReclaimPage() {
   const router = useRouter();
@@ -23,21 +24,14 @@ export default function StandaloneReclaimPage() {
   const [reason, setReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'http://localhost:4000';
-
   useEffect(() => {
     checkAuthStatus();
+    loadReclaimClaims();
   }, []);
-
-  useEffect(() => {
-    if (adminUser) {
-      loadReclaimClaims();
-    }
-  }, [adminUser]);
 
   const checkAuthStatus = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/auth/me`, { credentials: 'include' });
+      const res = await apiFetch('/admin/auth/me');
       if (res.ok) {
         const data = await res.json();
         setAdminUser(data.admin_user);
@@ -52,7 +46,7 @@ export default function StandaloneReclaimPage() {
   const loadReclaimClaims = async () => {
     setDataLoading(true);
     try {
-      const res = await fetch(`${apiUrl}/admin/cases?type=ownership_transfer`, { credentials: 'include' });
+      const res = await apiFetch('/admin/cases?type=ownership_transfer');
       if (res.ok) {
         const data = await res.json();
         setClaims(data.cases || []);
@@ -71,7 +65,7 @@ export default function StandaloneReclaimPage() {
     setReason('');
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${claim.id}`, { credentials: 'include' });
+      const res = await apiFetch(`/admin/cases/${claim.id}`);
       if (res.ok) {
         const data = await res.json();
         setClaimDetails(data);
@@ -92,10 +86,9 @@ export default function StandaloneReclaimPage() {
     setSubmitting(true);
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${selectedClaim.id}/action`, {
+      const res = await apiFetch(`/admin/cases/${selectedClaim.id}/action`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           action_type: 'transfer_ownership',
           reason,

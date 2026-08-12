@@ -4,13 +4,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, ArrowLeft, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
+import { apiFetch } from '../../lib/apiClient';
 
 export default function AdminInstitutionsPage() {
   const router = useRouter();
   const [claims, setClaims] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const apiUrl = process.env.NEXT_PUBLIC_MANAGE_API_URL || 'https://cpa-manage.onrender.com';
 
   useEffect(() => {
     loadClaims();
@@ -18,7 +17,7 @@ export default function AdminInstitutionsPage() {
 
   const loadClaims = async () => {
     try {
-      const res = await fetch(`${apiUrl}/admin/claims/institution`, { credentials: 'include' });
+      const res = await apiFetch('/admin/claims/institution');
       if (res.ok) {
         const data = await res.json();
         setClaims(data.claims || []);
@@ -32,9 +31,8 @@ export default function AdminInstitutionsPage() {
 
   const handleApprove = async (id) => {
     try {
-      const res = await fetch(`${apiUrl}/admin/claims/institution/${id}/approve`, {
+      const res = await apiFetch(`/admin/claims/institution/${id}/approve`, {
         method: 'PATCH',
-        credentials: 'include',
       });
       if (res.ok) loadClaims();
     } catch (err) {
@@ -46,11 +44,10 @@ export default function AdminInstitutionsPage() {
     const reason = prompt('Reason for rejecting this claim:');
     if (!reason) return;
     try {
-      const res = await fetch(`${apiUrl}/admin/claims/institution/${id}/reject`, {
+      const res = await apiFetch(`/admin/claims/institution/${id}/reject`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reason }),
-        credentials: 'include',
       });
       if (res.ok) loadClaims();
     } catch (err) {
