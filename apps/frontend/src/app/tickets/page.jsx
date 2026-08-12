@@ -193,7 +193,7 @@ export default function StandaloneTicketsPage() {
     setIssueStrike(false);
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${ticket.id}`, { credentials: 'include' });
+      const res = await apiFetch(`/admin/cases/${ticket.id}`);
       if (res.ok) {
         const data = await res.json();
         setTicketDetails(data);
@@ -214,10 +214,9 @@ export default function StandaloneTicketsPage() {
     setSubmittingAction(true);
 
     try {
-      const res = await fetch(`${apiUrl}/admin/cases/${selectedTicket.id}/action`, {
+      const res = await apiFetch(`/admin/cases/${selectedTicket.id}/action`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           action_type: actionType,
           reason: actionReason,
@@ -246,7 +245,7 @@ export default function StandaloneTicketsPage() {
 
   // Client-side search and view mode filtering
   const filteredTickets = tickets.filter(t => {
-    const isEmailItem = Boolean(t.target_mailbox) || t.source_surface === 'email' || (t.category && String(t.category).toLowerCase().includes('email')) || (t.type && String(t.type).toLowerCase().includes('email'));
+    const isEmailItem = t.type === 'email_inbound' || t.type === 'email';
     if (activeViewMode === 'emails' && !isEmailItem) return false;
     if (activeViewMode === 'reports' && isEmailItem) return false;
 

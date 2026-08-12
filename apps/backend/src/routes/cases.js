@@ -102,7 +102,7 @@ router.get(
         if (type === 'email' || type === 'emails' || type === 'email_inbound') {
           conditions.push(`(type = 'email_inbound' OR type = 'email')`);
         } else if (type === 'report' || type === 'reports' || type === 'content-report') {
-          conditions.push(`(type = 'content-report' OR type = 'report' OR type != 'email_inbound')`);
+          conditions.push(`(type = 'content-report' OR type = 'report') AND type NOT IN ('email_inbound', 'email')`);
         } else {
           conditions.push(`type = $${idx++}`);
           values.push(type);
