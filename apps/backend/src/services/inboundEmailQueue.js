@@ -67,14 +67,20 @@ async function processInboundEmailJob(jobData) {
   }
 
   // Fetch full email content from Resend API if payload incomplete
-  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY;
+  const config = require('../config');
+  const apiKey = process.env.EMAIL_PROVIDER_API_KEY || process.env.RESEND_API_KEY || config.EMAIL_PROVIDER_API_KEY;
   let emailData = rawPayload;
 
   if (!emailData?.html && !emailData?.text && apiKey) {
     try {
-      const fetchResp = await fetch(`https://api.resend.com/emails/${resendEmailId}`, {
+      let fetchResp = await fetch(`https://api.resend.com/emails/receiving/${resendEmailId}`, {
         headers: { 'Authorization': `Bearer ${apiKey}` },
       });
+      if (!fetchResp.ok) {
+        fetchResp = await fetch(`https://api.resend.com/emails/${resendEmailId}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
+      }
       if (fetchResp.ok) {
         emailData = await fetchResp.json();
       }
@@ -106,8 +112,20 @@ async function processInboundEmailJob(jobData) {
   let cleanText = rawBodyText || subject;
   try {
     if (rawBodyText) {
+      // 1. Try node-email-reply-parser
       const parsed = new EmailReplyParser().read(rawBodyText);
-      cleanText = parsed.getVisibleText() || rawBodyText;
+      let parsedText = parsed.getVisibleText();
+      
+      // 2. Multilingual reply header stripper (Arabic, French, Spanish, German, English)
+      if (parsedText) {
+        const quoteRegex = /(?:\r?\n)(?:في\s+.*كتب:|On\s+.*wrote:|Le\s+.*écrit:|El\s+.*escribió:|Am\s+.*schrieb:|>|-{3,}Original Message-{3,})/i;
+        const match = parsedText.search(quoteRegex);
+        if (match > 0) {
+          parsedText = parsedText.substring(0, match).trim();
+        }
+      }
+      
+      cleanText = parsedText || rawBodyText || subject;
     }
   } catch (e) {
     cleanText = rawBodyText || subject;
