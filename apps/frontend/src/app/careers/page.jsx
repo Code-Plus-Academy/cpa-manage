@@ -159,7 +159,7 @@ export default function PublicCareersPage() {
         </div>
 
         {loading ? (
-          <LottieLoader type="profile" message="Loading career positions..." size={120} />
+          <LottieLoader type="profile" message="Loading career positions..." />
         ) : filteredPositions.length === 0 ? (
           <div style={{ padding: '60px', textAlign: 'center', background: 'rgba(18, 20, 29, 0.6)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' }}>
             <Building2 size={48} style={{ color: '#4b5563', marginBottom: '16px' }} />

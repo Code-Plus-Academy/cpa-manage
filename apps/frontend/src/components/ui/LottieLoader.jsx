@@ -26,7 +26,7 @@ export default function LottieLoader({
   type = 'default',
   message = 'Loading...',
   variant = 'card',
-  size = variant === 'inline' ? 32 : 140,
+  size = variant === 'inline' ? 48 : (variant === 'fullscreen' ? 340 : 300),
 }) {
   const src = LOTTIE_MAP[type] || LOTTIE_MAP.default;
 
@@ -71,7 +71,7 @@ export default function LottieLoader({
             flexDirection: 'column',
             alignItems: 'center',
             gap: '16px',
-            maxWidth: '380px',
+            maxWidth: '460px',
             textAlign: 'center',
           }}
         >
@@ -79,7 +79,7 @@ export default function LottieLoader({
             <DotLottiePlayer src={src} autoplay loop style={{ width: '100%', height: '100%' }} />
           </div>
           {message && (
-            <div style={{ fontSize: '14px', fontWeight: '600', color: tokens.colors.textPrimary, letterSpacing: '-0.01em' }}>
+            <div style={{ fontSize: '15px', fontWeight: '700', color: tokens.colors.textPrimary, letterSpacing: '-0.01em' }}>
               {message}
             </div>
           )}
@@ -99,9 +99,9 @@ export default function LottieLoader({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '48px 24px',
+        padding: '36px 24px',
         width: '100%',
-        minHeight: '220px',
+        minHeight: '340px',
         backgroundColor: 'rgba(15, 23, 42, 0.3)',
         borderRadius: '12px',
       }}

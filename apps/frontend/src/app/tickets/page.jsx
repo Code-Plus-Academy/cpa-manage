@@ -375,7 +375,7 @@ export default function StandaloneTicketsPage() {
           }}
         >
           {dataLoading ? (
-            <LottieLoader type="search" message="Fetching support tickets queue..." size={100} />
+            <LottieLoader type="search" message="Fetching support tickets queue..." />
           ) : filteredTickets.length === 0 ? (
             <div style={{ padding: '60px 20px', textAlign: 'center', color: tokens.colors.textMuted }}>
               <Ticket size={44} color={tokens.colors.textMuted} style={{ marginBottom: '12px' }} />

@@ -605,7 +605,7 @@ export default function StandaloneEmailPage() {
 
             <div style={{ backgroundColor: tokens.colors.surfaceElevated, border: `1px solid ${tokens.colors.borderSubtle}`, borderRadius: '12px', overflowX: 'auto' }}>
               {dataLoading ? (
-                <LottieLoader type="article" message="Fetching email templates..." size={100} />
+                <LottieLoader type="article" message="Fetching email templates..." />
               ) : templates.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email templates found in system database.</div>
               ) : (
@@ -729,7 +729,7 @@ export default function StandaloneEmailPage() {
 
             <div style={{ backgroundColor: tokens.colors.surfaceElevated, borderRadius: '12px', border: `1px solid ${tokens.colors.borderSubtle}`, overflowX: 'auto' }}>
               {dataLoading ? (
-                <LottieLoader type="profile" message="Loading verified sender addresses..." size={100} />
+                <LottieLoader type="profile" message="Loading verified sender addresses..." />
               ) : senderEmails.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No sender email addresses configured.</div>
               ) : (
@@ -861,7 +861,7 @@ export default function StandaloneEmailPage() {
                 Individual Dispatch Log ({sends.length} records)
               </div>
               {dataLoading ? (
-                <LottieLoader type="search" message="Gathering email delivery logs & analytics..." size={100} />
+                <LottieLoader type="search" message="Gathering email delivery logs & analytics..." />
               ) : sends.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: tokens.colors.textMuted }}>No email dispatch events recorded yet.</div>
               ) : (
