@@ -6,7 +6,6 @@ const express = require('express');
 const router = express.Router();
 const { query, getClient } = require('../config/db');
 const { AppError } = require('../utils/errors');
-const requirePermission = require('../middleware/requirePermission');
 const { writeAuditLog } = require('../middleware/auditLog');
 
 /**
@@ -16,15 +15,19 @@ const { writeAuditLog } = require('../middleware/auditLog');
 router.get('/', async (req, res, next) => {
   try {
     // Ensure table exists
-    await query(`
-      CREATE TABLE IF NOT EXISTS featured_contributors (
-        id SERIAL PRIMARY KEY,
-        user_id INT UNIQUE NOT NULL,
-        role_title TEXT,
-        badge TEXT,
-        featured_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS featured_contributors (
+          id SERIAL PRIMARY KEY,
+          user_id INT UNIQUE NOT NULL,
+          role_title TEXT,
+          badge TEXT,
+          featured_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+    } catch (tblErr) {
+      console.warn('Table create notice:', tblErr.message);
+    }
 
     const q = req.query.q ? `%${req.query.q.trim()}%` : null;
 
@@ -92,37 +95,43 @@ router.get('/', async (req, res, next) => {
  * Body: { user_id, username, role_title, badge }
  */
 router.post('/feature', async (req, res, next) => {
-  const client = await getClient();
   try {
     let { user_id, username, role_title, badge } = req.body;
 
+    // Resolve username to user_id if provided
     if (!user_id && username) {
       const cleanUsername = username.replace(/^@/, '').trim();
-      const userRes = await client.query('SELECT id FROM users WHERE username ILIKE $1 LIMIT 1', [cleanUsername]);
+      const userRes = await query('SELECT id FROM users WHERE username ILIKE $1 LIMIT 1', [cleanUsername]);
       if (userRes.rows.length > 0) {
         user_id = userRes.rows[0].id;
       } else {
-        return next(new AppError('NOT_FOUND', 404, { message: `User with username @${cleanUsername} not found.` }));
+        return res.status(404).json({ error: { message: `User with username @${cleanUsername} not found.` } });
       }
     }
 
     if (!user_id) {
-      return next(new AppError('VALIDATION_ERROR', 400, { fields: { user_id: 'required' } }));
+      return res.status(400).json({ error: { message: 'user_id or username is required' } });
     }
 
-    await client.query('BEGIN');
+    const numericUserId = parseInt(user_id, 10) || user_id;
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS featured_contributors (
-        id SERIAL PRIMARY KEY,
-        user_id INT UNIQUE NOT NULL,
-        role_title TEXT,
-        badge TEXT,
-        featured_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    // Ensure table exists
+    try {
+      await query(`
+        CREATE TABLE IF NOT EXISTS featured_contributors (
+          id SERIAL PRIMARY KEY,
+          user_id INT UNIQUE NOT NULL,
+          role_title TEXT,
+          badge TEXT,
+          featured_at TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+    } catch (tblErr) {
+      console.warn('Table create notice:', tblErr.message);
+    }
 
-    const { rows } = await client.query(`
+    // Upsert into featured_contributors
+    const { rows } = await query(`
       INSERT INTO featured_contributors (user_id, role_title, badge, featured_at)
       VALUES ($1, $2, $3, NOW())
       ON CONFLICT (user_id) DO UPDATE
@@ -130,30 +139,33 @@ router.post('/feature', async (req, res, next) => {
             badge = EXCLUDED.badge,
             featured_at = NOW()
       RETURNING *
-    `, [user_id, role_title || null, badge || null]);
+    `, [numericUserId, role_title || null, badge || null]);
 
+    // Optional audit log (non-blocking)
     if (req.adminUser) {
-      await writeAuditLog(client, {
-        actorAdminId: req.adminUser.id,
-        actorIsRoot: req.adminUser.is_root,
-        permissionUsed: 'users.moderate',
-        module: 'community',
-        action: 'contributors.featured',
-        targetType: 'user',
-        targetId: String(user_id),
-        reason: `Featured as contributor with badge: ${badge || 'Verified'}`,
-        metadata: { role_title, badge },
-      });
+      try {
+        const client = await getClient();
+        await writeAuditLog(client, {
+          actorAdminId: req.adminUser.id,
+          actorIsRoot: req.adminUser.is_root,
+          permissionUsed: 'users.moderate',
+          module: 'community',
+          action: 'contributors.featured',
+          targetType: 'user',
+          targetId: String(numericUserId),
+          reason: `Featured as contributor with badge: ${badge || 'Verified'}`,
+          metadata: { role_title, badge },
+        });
+        client.release();
+      } catch (auditErr) {
+        console.warn('[Audit Log Warning]:', auditErr.message);
+      }
     }
-
-    await client.query('COMMIT');
 
     res.status(200).json({ success: true, featured: rows[0] });
   } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
+    console.error('[POST /admin/contributors/feature]', err);
+    res.status(500).json({ error: { message: err.message || 'Failed to feature contributor' } });
   }
 });
 
@@ -161,35 +173,36 @@ router.post('/feature', async (req, res, next) => {
  * DELETE /admin/contributors/feature/:userId
  */
 router.delete('/feature/:userId', async (req, res, next) => {
-  const client = await getClient();
   try {
     const { userId } = req.params;
+    const numericUserId = parseInt(userId, 10) || userId;
 
-    await client.query('BEGIN');
+    await query('DELETE FROM featured_contributors WHERE user_id = $1', [numericUserId]);
 
-    await client.query('DELETE FROM featured_contributors WHERE user_id = $1', [userId]);
-
+    // Optional audit log (non-blocking)
     if (req.adminUser) {
-      await writeAuditLog(client, {
-        actorAdminId: req.adminUser.id,
-        actorIsRoot: req.adminUser.is_root,
-        permissionUsed: 'users.moderate',
-        module: 'community',
-        action: 'contributors.unfeatured',
-        targetType: 'user',
-        targetId: String(userId),
-        reason: 'Removed from featured contributors',
-      });
+      try {
+        const client = await getClient();
+        await writeAuditLog(client, {
+          actorAdminId: req.adminUser.id,
+          actorIsRoot: req.adminUser.is_root,
+          permissionUsed: 'users.moderate',
+          module: 'community',
+          action: 'contributors.unfeatured',
+          targetType: 'user',
+          targetId: String(numericUserId),
+          reason: 'Removed from featured contributors',
+        });
+        client.release();
+      } catch (auditErr) {
+        console.warn('[Audit Log Warning]:', auditErr.message);
+      }
     }
-
-    await client.query('COMMIT');
 
     res.json({ success: true });
   } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
+    console.error('[DELETE /admin/contributors/feature/:userId]', err);
+    res.status(500).json({ error: { message: err.message || 'Failed to remove contributor' } });
   }
 });
 
