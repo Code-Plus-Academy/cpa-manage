@@ -62,7 +62,17 @@ router.get('/', async (req, res, next) => {
 router.post('/feature', async (req, res, next) => {
   const client = await getClient();
   try {
-    const { user_id, role_title, badge } = req.body;
+    let { user_id, username, role_title, badge } = req.body;
+
+    if (!user_id && username) {
+      const cleanUsername = username.replace(/^@/, '').trim();
+      const userRes = await client.query('SELECT id FROM users WHERE username ILIKE $1 LIMIT 1', [cleanUsername]);
+      if (userRes.rows.length > 0) {
+        user_id = userRes.rows[0].id;
+      } else {
+        return next(new AppError('NOT_FOUND', 404, { message: `User with username @${cleanUsername} not found.` }));
+      }
+    }
 
     if (!user_id) {
       return next(new AppError('VALIDATION_ERROR', 400, { fields: { user_id: 'required' } }));

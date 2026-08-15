@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Award, Search, RefreshCw, Star, Sparkles, UserPlus, UserCheck,
-  Trash2, Edit3, ShieldCheck, CheckCircle2, ExternalLink, X, Loader2
+  Trash2, Edit3, ShieldCheck, CheckCircle2, ExternalLink, X, Loader2, Plus
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
 import { tokens } from '../theme/tokens';
@@ -21,6 +21,16 @@ const BADGE_OPTIONS = [
   'Class Representative',
 ];
 
+const ROLE_PRESETS = [
+  'Senior Campus Lead & AI/ML Contributor',
+  'Class Representative & GATE CS Lead',
+  'Lab Assistant Contributor & Systems Lead',
+  'Distributed Systems & OS Contributor',
+  'Web Dev & Flutter Lead',
+  'Data Structures & Algorithms Contributor',
+  'Verified Notes Contributor',
+];
+
 export default function ContributorsManagementPage() {
   const router = useRouter();
   const [adminUser, setAdminUser] = useState(null);
@@ -30,7 +40,9 @@ export default function ContributorsManagementPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState('all'); // 'all' | 'featured' | 'unfeatured'
 
-  // Modal states for featuring / editing a contributor
+  // Modal states for adding/featuring a contributor
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [targetUsernameOrId, setTargetUsernameOrId] = useState('');
   const [activeModalUser, setActiveModalUser] = useState(null);
   const [roleTitle, setRoleTitle] = useState('');
   const [badge, setBadge] = useState('Top Reviewer');
@@ -76,8 +88,20 @@ export default function ContributorsManagementPage() {
     }
   };
 
+  const handleOpenAddModal = () => {
+    setIsAddModalOpen(true);
+    setActiveModalUser(null);
+    setTargetUsernameOrId('');
+    setRoleTitle(ROLE_PRESETS[0]);
+    setBadge('Top Reviewer');
+    setActionSuccess('');
+    setActionError('');
+  };
+
   const handleOpenFeatureModal = (user) => {
+    setIsAddModalOpen(false);
     setActiveModalUser(user);
+    setTargetUsernameOrId(user.username);
     setRoleTitle(user.role_title || user.role || 'Senior Campus Lead');
     setBadge(user.badge || 'Top Reviewer');
     setActionSuccess('');
@@ -85,27 +109,41 @@ export default function ContributorsManagementPage() {
   };
 
   const handleCloseModal = () => {
+    setIsAddModalOpen(false);
     setActiveModalUser(null);
+    setTargetUsernameOrId('');
     setRoleTitle('');
     setBadge('Top Reviewer');
   };
 
   const handleSaveFeature = async (e) => {
     e.preventDefault();
-    if (!activeModalUser) return;
     setSubmitting(true);
     setActionError('');
     setActionSuccess('');
 
     try {
+      const payload = {
+        role_title: roleTitle.trim() || 'Verified Notes Contributor',
+        badge: badge || 'Top Reviewer',
+      };
+
+      if (activeModalUser) {
+        payload.user_id = activeModalUser.id;
+      } else if (targetUsernameOrId) {
+        if (/^\d+$/.test(targetUsernameOrId.trim())) {
+          payload.user_id = parseInt(targetUsernameOrId.trim(), 10);
+        } else {
+          payload.username = targetUsernameOrId.trim().replace(/^@/, '');
+        }
+      } else {
+        throw new Error('Please select a user or enter a username.');
+      }
+
       const res = await apiFetch('/admin/contributors/feature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: activeModalUser.id,
-          role_title: roleTitle.trim() || 'Verified Notes Contributor',
-          badge: badge || 'Top Reviewer',
-        }),
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -113,7 +151,7 @@ export default function ContributorsManagementPage() {
         throw new Error(data?.error?.message || data?.error || 'Failed to feature contributor');
       }
 
-      setActionSuccess(`Successfully featured @${activeModalUser.username} on /contributors!`);
+      setActionSuccess(`Successfully added contributor to /contributors!`);
       handleCloseModal();
       await loadContributors();
     } catch (err) {
@@ -200,7 +238,21 @@ export default function ContributorsManagementPage() {
             </p>
           </div>
 
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button
+              onClick={handleOpenAddModal}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 18px', borderRadius: 8,
+                background: 'linear-gradient(135deg, #00dbe9, #2563eb)',
+                border: 'none', color: '#fff', fontSize: 13, fontWeight: 700,
+                cursor: 'pointer', boxShadow: '0 2px 12px rgba(0, 219, 233, 0.25)',
+              }}
+            >
+              <Plus size={16} />
+              <span>+ Add Contributor</span>
+            </button>
+
             <a
               href="https://www.codeplusacademy.in/contributors"
               target="_blank"
@@ -601,12 +653,12 @@ export default function ContributorsManagementPage() {
           )}
         </div>
 
-        {/* ── Feature / Edit Modal ── */}
-        {activeModalUser && (
+        {/* ── Add / Feature Contributor Modal ── */}
+        {(isAddModalOpen || activeModalUser) && (
           <div style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(0,0,0,0.7)',
+            background: 'rgba(0,0,0,0.75)',
             backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
@@ -616,18 +668,18 @@ export default function ContributorsManagementPage() {
           }}>
             <div style={{
               background: '#0a0f1d',
-              border: '1px solid rgba(0, 219, 233, 0.3)',
+              border: '1px solid rgba(0, 219, 233, 0.35)',
               borderRadius: 18,
               padding: '24px 28px',
               maxWidth: 480,
               width: '100%',
-              boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.6)',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Award size={18} color="#00dbe9" />
+                  <Award size={20} color="#00dbe9" />
                   <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#f0f2f8' }}>
-                    {activeModalUser.is_featured ? 'Update Contributor Profile' : 'Feature User as Contributor'}
+                    {activeModalUser ? (activeModalUser.is_featured ? 'Update Contributor Profile' : 'Feature User as Contributor') : 'Add Contributor by Username'}
                   </h3>
                 </div>
                 <button
@@ -638,29 +690,49 @@ export default function ContributorsManagementPage() {
                 </button>
               </div>
 
-              {/* User Preview */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 14px', borderRadius: 10,
-                background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)',
-                marginBottom: 18,
-              }}>
-                <img
-                  src={activeModalUser.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${activeModalUser.username}`}
-                  alt={activeModalUser.username}
-                  width={42}
-                  height={42}
-                  style={{ borderRadius: '50%', border: '2px solid #00dbe9' }}
-                />
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
-                    {activeModalUser.name || activeModalUser.username}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#00dbe9', fontFamily: 'monospace' }}>
-                    @{activeModalUser.username} · {activeModalUser.college_name || 'No College Assigned'}
+              {/* User Selection or Preview */}
+              {activeModalUser ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 14px', borderRadius: 10,
+                  background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)',
+                  marginBottom: 18,
+                }}>
+                  <img
+                    src={activeModalUser.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${activeModalUser.username}`}
+                    alt={activeModalUser.username}
+                    width={42}
+                    height={42}
+                    style={{ borderRadius: '50%', border: '2px solid #00dbe9' }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
+                      {activeModalUser.name || activeModalUser.username}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#00dbe9', fontFamily: 'monospace' }}>
+                      @{activeModalUser.username} · {activeModalUser.college_name || 'Autonomous Tech Institute'}
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div style={{ marginBottom: 14 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#00dbe9', textTransform: 'uppercase', marginBottom: 4, fontFamily: 'monospace' }}>
+                    Username or User ID
+                  </label>
+                  <input
+                    value={targetUsernameOrId}
+                    onChange={(e) => setTargetUsernameOrId(e.target.value)}
+                    placeholder="e.g. aarav_mehta or @ananya_code"
+                    required
+                    style={{
+                      width: '100%', boxSizing: 'border-box',
+                      padding: '9px 12px', borderRadius: 8,
+                      background: '#070a0e', border: '1px solid rgba(255,255,255,0.15)',
+                      color: '#f0f2f8', fontSize: 13, outline: 'none',
+                    }}
+                  />
+                </div>
+              )}
 
               <form onSubmit={handleSaveFeature} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {/* Role Title */}
