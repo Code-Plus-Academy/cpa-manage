@@ -42,7 +42,7 @@ router.get('/', async (req, res, next) => {
     const params = [];
     if (q) {
       params.push(q);
-      queryText += ` WHERE (u.name ILIKE $1 OR u.username ILIKE $1 OR u.college_name ILIKE $1)`;
+      queryText += ` WHERE (u.name ILIKE $1 OR u.username ILIKE $1 OR u.college_name ILIKE $1 OR u.email ILIKE $1)`;
     }
 
     queryText += ` ORDER BY is_featured DESC, fc.featured_at DESC NULLS LAST, u.created_at DESC LIMIT 250`;
