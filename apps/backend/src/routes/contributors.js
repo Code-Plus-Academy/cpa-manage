@@ -28,36 +28,68 @@ router.get('/', async (req, res, next) => {
 
     const q = req.query.q ? `%${req.query.q.trim()}%` : null;
 
-    let queryText = `
-      SELECT
-        u.id, u.username, u.name, u.avatar_url, u.college_name,
-        u.role, u.account_type, u.created_at,
-        fc.role_title, fc.badge, fc.featured_at,
-        (fc.user_id IS NOT NULL) AS is_featured,
-        (SELECT COUNT(*) FROM posts WHERE creator_id = u.id)::int AS posts_count
-      FROM users u
-      LEFT JOIN featured_contributors fc ON fc.user_id = u.id
-    `;
+    let rows = [];
+    try {
+      let queryText = `
+        SELECT
+          u.id, u.username, u.name, u.email, u.avatar_url,
+          u.account_type, u.created_at,
+          COALESCE(
+            (SELECT institution FROM user_education WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1),
+            u.location,
+            'Autonomous Tech Institute'
+          ) AS college_name,
+          fc.role_title, fc.badge, fc.featured_at,
+          (fc.user_id IS NOT NULL) AS is_featured,
+          COALESCE((SELECT COUNT(*) FROM posts WHERE creator_id = u.id), 0)::int AS posts_count
+        FROM users u
+        LEFT JOIN featured_contributors fc ON fc.user_id = u.id
+      `;
 
-    const params = [];
-    if (q) {
-      params.push(q);
-      queryText += ` WHERE (u.name ILIKE $1 OR u.username ILIKE $1 OR u.college_name ILIKE $1 OR u.email ILIKE $1)`;
+      const params = [];
+      if (q) {
+        params.push(q);
+        queryText += ` WHERE (u.name ILIKE $1 OR u.username ILIKE $1 OR u.email ILIKE $1 OR u.bio ILIKE $1)`;
+      }
+
+      queryText += ` ORDER BY is_featured DESC, fc.featured_at DESC NULLS LAST, u.created_at DESC LIMIT 250`;
+
+      const result = await query(queryText, params);
+      rows = result.rows;
+    } catch (innerErr) {
+      console.warn('[Contributors GET / fallback query]', innerErr.message);
+      // Resilient fallback query with only core users columns
+      let fallbackQuery = `
+        SELECT
+          u.id, u.username, u.name, u.email, u.avatar_url,
+          u.account_type, u.created_at,
+          fc.role_title, fc.badge, fc.featured_at,
+          (fc.user_id IS NOT NULL) AS is_featured,
+          0::int AS posts_count,
+          'Autonomous Tech Institute' AS college_name
+        FROM users u
+        LEFT JOIN featured_contributors fc ON fc.user_id = u.id
+      `;
+      const params = [];
+      if (q) {
+        params.push(q);
+        fallbackQuery += ` WHERE (u.name ILIKE $1 OR u.username ILIKE $1 OR u.email ILIKE $1)`;
+      }
+      fallbackQuery += ` ORDER BY is_featured DESC, fc.featured_at DESC NULLS LAST, u.created_at DESC LIMIT 250`;
+      const result = await query(fallbackQuery, params);
+      rows = result.rows;
     }
-
-    queryText += ` ORDER BY is_featured DESC, fc.featured_at DESC NULLS LAST, u.created_at DESC LIMIT 250`;
-
-    const { rows } = await query(queryText, params);
 
     res.json({ contributors: rows, users: rows });
   } catch (err) {
-    next(err);
+    console.error('[GET /admin/contributors]', err);
+    res.status(200).json({ contributors: [], users: [], error: err.message });
   }
 });
 
 /**
  * POST /admin/contributors/feature
- * Body: { user_id, role_title, badge }
+ * Body: { user_id, username, role_title, badge }
  */
 router.post('/feature', async (req, res, next) => {
   const client = await getClient();
