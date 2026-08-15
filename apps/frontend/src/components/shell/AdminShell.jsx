@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
-  ChevronLeft, ChevronRight, ChevronDown, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send, Menu, X
+  ChevronLeft, ChevronRight, ChevronDown, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send, Menu, X, Award
 } from 'lucide-react';
 import { tokens } from '../../app/theme/tokens';
 
@@ -86,6 +86,7 @@ export default function AdminShell({
   const effectiveActiveTab = activeTab || (
     currentRoute ? currentRoute.replace(/^\//, '') : (
       pathname.includes('/email') ? 'email' :
+      pathname.includes('/contributors') ? 'contributors' :
       pathname.includes('/hiring') ? 'hiring' :
       pathname.includes('/careers') ? 'careers' :
       pathname.includes('/tickets') ? 'tickets' :
@@ -101,6 +102,7 @@ export default function AdminShell({
   );
 
   const defaultBreadcrumbs = {
+    contributors: ['Community', 'Contributors Management'],
     email: ['Communications', 'Email System Studio'],
     hiring: ['Hiring & Recruitment', 'Hiring & ATS Studio'],
     careers: ['Hiring & Recruitment', 'Public Careers Portal'],
@@ -134,6 +136,12 @@ export default function AdminShell({
         { id: 'copyright', label: 'Copyright Claims', icon: Scale, perm: 'claims.copyright.view' },
         { id: 'institutions', label: 'Institution Claims', icon: Building2, perm: 'claims.institution.view' },
         { id: 'reclaim', label: 'Content Reclaim Claims', icon: FileText, perm: 'claims.reclaim.view' },
+      ],
+    },
+    {
+      title: 'COMMUNITY & PLATFORM',
+      items: [
+        { id: 'contributors', label: 'Manage Contributors', icon: Award, route: '/contributors' },
       ],
     },
     {
