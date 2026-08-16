@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ShieldAlert, Ticket, Scale, Building2, UserX, FileText, Mail, Activity, Users,
-  ChevronLeft, ChevronRight, ChevronDown, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send, Menu, X, Award
+  ChevronLeft, ChevronRight, ChevronDown, LogOut, Search, Bell, ShieldCheck, Command, Briefcase, Sparkles, Send, Menu, X, Award, Code2
 } from 'lucide-react';
 import { tokens } from '../../app/theme/tokens';
 
@@ -86,6 +86,7 @@ export default function AdminShell({
   const effectiveActiveTab = activeTab || (
     currentRoute ? currentRoute.replace(/^\//, '') : (
       pathname.includes('/email') ? 'email' :
+      pathname.includes('/builders') ? 'builders' :
       pathname.includes('/contributors') ? 'contributors' :
       pathname.includes('/hiring') ? 'hiring' :
       pathname.includes('/careers') ? 'careers' :
@@ -102,6 +103,7 @@ export default function AdminShell({
   );
 
   const defaultBreadcrumbs = {
+    builders: ['Community', 'Team & Builders Management'],
     contributors: ['Community', 'Contributors Management'],
     email: ['Communications', 'Email System Studio'],
     hiring: ['Hiring & Recruitment', 'Hiring & ATS Studio'],
@@ -141,6 +143,7 @@ export default function AdminShell({
     {
       title: 'COMMUNITY & PLATFORM',
       items: [
+        { id: 'builders', label: 'Team & Builders Studio', icon: Code2, route: '/builders' },
         { id: 'contributors', label: 'Manage Contributors', icon: Award, route: '/contributors' },
       ],
     },
