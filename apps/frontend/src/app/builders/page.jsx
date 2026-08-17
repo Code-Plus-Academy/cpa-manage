@@ -9,7 +9,6 @@ import {
   Mail, Users, Award, Terminal
 } from 'lucide-react';
 import AdminShell from '../../components/shell/AdminShell';
-import { tokens } from '../theme/tokens';
 import { apiFetch } from '../../lib/apiClient';
 
 const CATEGORY_OPTIONS = [
@@ -129,6 +128,30 @@ const DEFAULT_BUILDERS = [
   }
 ];
 
+const STYLES = {
+  input: {
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '9px 13px',
+    borderRadius: 8,
+    background: '#070a0e',
+    border: '1px solid rgba(255, 255, 255, 0.15)',
+    color: '#f8fafc',
+    fontSize: 13,
+    outline: 'none',
+  },
+  label: {
+    display: 'block',
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#00dbe9',
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginBottom: 5,
+    fontFamily: 'monospace',
+  }
+};
+
 export default function BuildersManagementPage() {
   const router = useRouter();
   const [adminUser, setAdminUser] = useState(null);
@@ -164,7 +187,7 @@ export default function BuildersManagementPage() {
   const [isJsonModalOpen, setIsJsonModalOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [copied, setCopied] = useState(false);
-  const [jsonTab, setJsonTab] = useState('export'); // 'export' | 'import'
+  const [jsonTab, setJsonTab] = useState('export');
 
   const [saving, setSaving] = useState(false);
   const [actionSuccess, setActionSuccess] = useState('');
@@ -205,7 +228,7 @@ export default function BuildersManagementPage() {
         }
       }
     } catch (err) {
-      console.warn('Failed to load builders from API, using default list:', err);
+      console.warn('Using default builder data fallback:', err);
     } finally {
       setDataLoading(false);
     }
@@ -327,51 +350,44 @@ export default function BuildersManagementPage() {
       socials: formSocials,
     };
 
+    // Generated Slug Identifier
+    const generatedId = editingBuilderId || formName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `builder-${Date.now()}`;
+
     try {
       let res;
       if (editingBuilderId) {
         res = await apiFetch(`/admin/builders/${editingBuilderId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, id: generatedId })
         });
       } else {
         res = await apiFetch('/admin/builders', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, id: generatedId })
         });
       }
 
-      if (res.ok) {
-        setIsModalOpen(false);
-        loadBuilders();
-      } else {
-        const data = await res.json().catch(() => ({}));
-        const errMsg = data?.error?.message || (typeof data?.error === 'string' ? data.error : data?.message) || 'Failed to save builder to backend.';
-        
-        // Optimistic local state update so admin never gets blocked
-        const generatedId = editingBuilderId || formName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
-        setBuilders(prev => {
-          const updated = [...prev];
-          const idx = updated.findIndex(b => b.id === generatedId);
-          const newEntry = { id: generatedId, ...payload };
-          if (idx >= 0) {
-            updated[idx] = newEntry;
-          } else {
-            updated.push(newEntry);
-          }
-          return updated;
-        });
-
-        setIsModalOpen(false);
-      }
-    } catch (err) {
-      console.warn('Network error, updating locally:', err);
-      const generatedId = editingBuilderId || formName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      // Optimistically update local state so changes take effect immediately
       setBuilders(prev => {
         const updated = [...prev];
-        const idx = updated.findIndex(b => b.id === generatedId);
+        const idx = updated.findIndex(b => b.id === generatedId || b.id === editingBuilderId);
+        const newEntry = { id: generatedId, ...payload };
+        if (idx >= 0) {
+          updated[idx] = newEntry;
+        } else {
+          updated.push(newEntry);
+        }
+        return updated;
+      });
+
+      setIsModalOpen(false);
+    } catch (err) {
+      console.warn('Network issue saving builder, updated in memory:', err);
+      setBuilders(prev => {
+        const updated = [...prev];
+        const idx = updated.findIndex(b => b.id === generatedId || b.id === editingBuilderId);
         const newEntry = { id: generatedId, ...payload };
         if (idx >= 0) {
           updated[idx] = newEntry;
@@ -477,11 +493,11 @@ export default function BuildersManagementPage() {
               }}>
                 <Code2 size={20} />
               </div>
-              <h1 style={{ fontSize: 24, fontWeight: 800, color: tokens.colors.textPrimary, margin: 0 }}>
+              <h1 style={{ fontSize: 24, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
                 Team & Builders Studio
               </h1>
             </div>
-            <p style={{ fontSize: 13.5, color: tokens.colors.textSecondary, margin: 0, maxWidth: 640 }}>
+            <p style={{ fontSize: 13.5, color: '#94a3b8', margin: 0, maxWidth: 640 }}>
               Manage Code Plus Academy's core software engineers, founders, designers, and alumni displayed on <code>/builders</code>.
             </p>
           </div>
@@ -491,12 +507,12 @@ export default function BuildersManagementPage() {
               onClick={handleOpenJsonModal}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px',
-                borderRadius: 10, background: tokens.colors.surfaceCard,
-                border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
+                borderRadius: 10, background: '#0a0f1d',
+                border: '1px solid rgba(255, 255, 255, 0.12)', color: '#f8fafc',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer'
               }}
             >
-              <FileCode size={16} />
+              <FileCode size={16} color="#00dbe9" />
               <span>JSON Export / Import</span>
             </button>
 
@@ -505,8 +521,8 @@ export default function BuildersManagementPage() {
               disabled={dataLoading}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px',
-                borderRadius: 10, background: tokens.colors.surfaceCard,
-                border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
+                borderRadius: 10, background: '#0a0f1d',
+                border: '1px solid rgba(255, 255, 255, 0.12)', color: '#f8fafc',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer'
               }}
             >
@@ -533,7 +549,7 @@ export default function BuildersManagementPage() {
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexWrap: 'wrap', gap: 16, marginBottom: 24, padding: '16px 20px',
-          background: tokens.colors.surfaceCard, border: `1px solid ${tokens.colors.borderLight}`,
+          background: '#0a0f1d', border: '1px solid rgba(255, 255, 255, 0.1)',
           borderRadius: 16
         }}>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -546,8 +562,8 @@ export default function BuildersManagementPage() {
                   fontSize: 12.5, fontWeight: 600, border: '1px solid',
                   cursor: 'pointer', transition: 'all 0.2s ease',
                   background: activeCategory === cat.id ? '#00dbe9' : 'transparent',
-                  color: activeCategory === cat.id ? '#000' : tokens.colors.textSecondary,
-                  borderColor: activeCategory === cat.id ? '#00dbe9' : tokens.colors.borderLight
+                  color: activeCategory === cat.id ? '#000' : '#94a3b8',
+                  borderColor: activeCategory === cat.id ? '#00dbe9' : 'rgba(255, 255, 255, 0.12)'
                 }}
               >
                 {cat.label}
@@ -556,16 +572,17 @@ export default function BuildersManagementPage() {
           </div>
 
           <div style={{ position: 'relative', minWidth: 260 }}>
-            <Search size={15} style={{ position: 'absolute', left: 12, top: 11, color: tokens.colors.textTertiary }} />
+            <Search size={15} style={{ position: 'absolute', left: 12, top: 11, color: '#64748b' }} />
             <input
               type="text"
               placeholder="Search by name, role, skill..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                width: '100%', padding: '8px 12px 8px 34px', borderRadius: 10,
-                background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                color: tokens.colors.textPrimary, fontSize: 13, outline: 'none'
+                width: '100%', boxSizing: 'border-box',
+                padding: '8px 12px 8px 34px', borderRadius: 10,
+                background: '#070a0e', border: '1px solid rgba(255, 255, 255, 0.12)',
+                color: '#f8fafc', fontSize: 13, outline: 'none'
               }}
             />
           </div>
@@ -573,16 +590,16 @@ export default function BuildersManagementPage() {
 
         {/* ── Builder Cards Grid ── */}
         {dataLoading && builders.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: tokens.colors.textSecondary }}>
+          <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
             <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 12px', color: '#00dbe9' }} />
             <p style={{ fontSize: 13.5 }}>Loading team builders from database...</p>
           </div>
         ) : filteredBuilders.length === 0 ? (
           <div style={{
-            background: tokens.colors.surfaceCard, border: `1px dashed ${tokens.colors.borderLight}`,
+            background: '#0a0f1d', border: '1px dashed rgba(255, 255, 255, 0.15)',
             borderRadius: 18, padding: '48px 24px', textAlign: 'center', maxWidth: 540, margin: '0 auto'
           }}>
-            <p style={{ color: tokens.colors.textSecondary, fontSize: 14, margin: '0 0 16px' }}>
+            <p style={{ color: '#94a3b8', fontSize: 14, margin: '0 0 16px' }}>
               No team members match the selected filter.
             </p>
             <button
@@ -604,9 +621,9 @@ export default function BuildersManagementPage() {
               <div
                 key={b.id}
                 style={{
-                  background: tokens.colors.surfaceCard, border: `1px solid ${tokens.colors.borderLight}`,
+                  background: '#0a0f1d', border: '1px solid rgba(255, 255, 255, 0.1)',
                   borderRadius: 18, padding: 22, display: 'flex', flexDirection: 'column',
-                  justifyContent: 'space-between', position: 'relative', boxShadow: '0 4px 18px rgba(0,0,0,0.12)'
+                  justifyContent: 'space-between', position: 'relative', boxShadow: '0 4px 18px rgba(0,0,0,0.2)'
                 }}
               >
                 <div>
@@ -635,7 +652,7 @@ export default function BuildersManagementPage() {
                     )}
 
                     <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.textPrimary }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f8fafc' }}>
                         {b.name}
                       </div>
                       <div style={{ fontSize: 12.5, fontWeight: 600, color: '#00dbe9', marginTop: 1 }}>
@@ -645,7 +662,7 @@ export default function BuildersManagementPage() {
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
                           background: (b.status || '').includes('Core') ? 'rgba(52, 211, 153, 0.15)' : 'rgba(255, 255, 255, 0.08)',
-                          color: (b.status || '').includes('Core') ? '#34d399' : tokens.colors.textSecondary,
+                          color: (b.status || '').includes('Core') ? '#34d399' : '#94a3b8',
                           textTransform: 'uppercase'
                         }}>
                           {b.status || 'Core Team'}
@@ -663,7 +680,7 @@ export default function BuildersManagementPage() {
 
                   {/* Bio */}
                   {b.bio && (
-                    <p style={{ fontSize: 12.5, color: tokens.colors.textSecondary, lineHeight: 1.5, margin: '0 0 12px' }}>
+                    <p style={{ fontSize: 12.5, color: '#94a3b8', lineHeight: 1.5, margin: '0 0 12px' }}>
                       {b.bio}
                     </p>
                   )}
@@ -671,10 +688,10 @@ export default function BuildersManagementPage() {
                   {/* Contributions */}
                   {Array.isArray(b.contributions) && b.contributions.length > 0 && (
                     <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 10.5, fontWeight: 700, color: tokens.colors.textPrimary, textTransform: 'uppercase', marginBottom: 4 }}>
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: '#f8fafc', textTransform: 'uppercase', marginBottom: 4 }}>
                         Key Architectural Impact:
                       </div>
-                      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: tokens.colors.textSecondary, lineHeight: 1.4 }}>
+                      <ul style={{ margin: 0, paddingLeft: 16, fontSize: 11.5, color: '#94a3b8', lineHeight: 1.4 }}>
                         {b.contributions.map((c, i) => (
                           <li key={i}>{c}</li>
                         ))}
@@ -690,8 +707,8 @@ export default function BuildersManagementPage() {
                           key={i}
                           style={{
                             fontSize: 10.5, fontWeight: 500, padding: '2px 7px',
-                            borderRadius: 6, background: tokens.colors.surfaceBg,
-                            border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary
+                            borderRadius: 6, background: '#070a0e',
+                            border: '1px solid rgba(255, 255, 255, 0.1)', color: '#f8fafc'
                           }}
                         >
                           {skill}
@@ -704,9 +721,9 @@ export default function BuildersManagementPage() {
                 {/* Card Bottom Actions & Socials */}
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  borderTop: `1px solid ${tokens.colors.borderLight}`, paddingTop: 12, marginTop: 6
+                  borderTop: '1px solid rgba(255, 255, 255, 0.1)', paddingTop: 12, marginTop: 6
                 }}>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', color: tokens.colors.textTertiary }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', color: '#64748b' }}>
                     {b.socials?.github && <Github size={14} />}
                     {b.socials?.linkedin && <Linkedin size={14} />}
                     {b.socials?.twitter && <Twitter size={14} />}
@@ -723,8 +740,8 @@ export default function BuildersManagementPage() {
                       onClick={() => handleOpenEdit(b)}
                       style={{
                         display: 'inline-flex', alignItems: 'center', gap: 4,
-                        padding: '6px 12px', borderRadius: 8, background: tokens.colors.surfaceBg,
-                        border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
+                        padding: '6px 12px', borderRadius: 8, background: '#070a0e',
+                        border: '1px solid rgba(255, 255, 255, 0.12)', color: '#f8fafc',
                         fontSize: 12, fontWeight: 600, cursor: 'pointer'
                       }}
                     >
@@ -755,22 +772,23 @@ export default function BuildersManagementPage() {
       {/* ── Add / Edit Builder Modal ── */}
       {isModalOpen && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20, zIndex: 9999, backdropFilter: 'blur(5px)'
+          padding: 20, zIndex: 9999, backdropFilter: 'blur(6px)'
         }}>
           <div style={{
-            background: tokens.colors.surfaceCard, border: `1px solid ${tokens.colors.borderLight}`,
-            borderRadius: 20, maxWidth: 680, width: '100%', maxHeight: '90vh',
-            overflowY: 'auto', padding: 28, boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+            background: '#0c1120', border: '1px solid rgba(0, 219, 233, 0.3)',
+            borderRadius: 20, maxWidth: 720, width: '100%', maxHeight: '90vh',
+            overflowY: 'auto', padding: 28, boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+            color: '#f8fafc'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 style={{ fontSize: 19, fontWeight: 800, color: tokens.colors.textPrimary, margin: 0 }}>
+              <h2 style={{ fontSize: 19, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
                 {editingBuilderId ? 'Edit Team Member' : 'Add New Team Member'}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: tokens.colors.textSecondary, cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
               >
                 <X size={20} />
               </button>
@@ -783,9 +801,9 @@ export default function BuildersManagementPage() {
             )}
 
             {/* Quick Auto-Fill from Platform User */}
-            <div style={{ marginBottom: 20, padding: 14, borderRadius: 12, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}` }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#00dbe9', textTransform: 'uppercase', marginBottom: 6 }}>
-                ⚡ Auto-Fill from Platform User:
+            <div style={{ marginBottom: 20, padding: 14, borderRadius: 12, background: '#070a0e', border: '1px solid rgba(0, 219, 233, 0.2)' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#00dbe9', textTransform: 'uppercase', marginBottom: 6, fontFamily: 'monospace' }}>
+                ⚡ Auto-Fill from Registered Platform User:
               </div>
               <select
                 onChange={(e) => {
@@ -793,14 +811,14 @@ export default function BuildersManagementPage() {
                   if (selectedUser) handleAutoFillUser(selectedUser);
                 }}
                 style={{
-                  width: '100%', padding: '8px 12px', borderRadius: 8,
-                  background: tokens.colors.surfaceCard, border: `1px solid ${tokens.colors.borderLight}`,
-                  color: tokens.colors.textPrimary, fontSize: 13
+                  ...STYLES.input,
+                  background: '#0a0f1d',
+                  color: '#f8fafc'
                 }}
               >
-                <option value="">-- Choose Registered User to Auto-Fill --</option>
+                <option value="" style={{ background: '#0a0f1d', color: '#94a3b8' }}>-- Choose Registered User to Auto-Fill --</option>
                 {platformUsers.map(u => (
-                  <option key={u.id} value={u.id}>
+                  <option key={u.id} value={u.id} style={{ background: '#0a0f1d', color: '#fff' }}>
                     {u.name || u.username} (@{u.username})
                   </option>
                 ))}
@@ -811,7 +829,7 @@ export default function BuildersManagementPage() {
               {/* Name & Role Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                  <label style={STYLES.label}>
                     Full Name *
                   </label>
                   <input
@@ -820,16 +838,12 @@ export default function BuildersManagementPage() {
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="e.g. Sayaji Kapse"
-                    style={{
-                      width: '100%', padding: '9px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 13
-                    }}
+                    style={STYLES.input}
                   />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                  <label style={STYLES.label}>
                     Role Title *
                   </label>
                   <input
@@ -838,11 +852,7 @@ export default function BuildersManagementPage() {
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value)}
                     placeholder="e.g. Lead Systems Architect"
-                    style={{
-                      width: '100%', padding: '9px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 13
-                    }}
+                    style={STYLES.input}
                   />
                 </div>
               </div>
@@ -850,27 +860,27 @@ export default function BuildersManagementPage() {
               {/* Category & Status Row */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                  <label style={STYLES.label}>
                     Team Category
                   </label>
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                     style={{
-                      width: '100%', padding: '9px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 13
+                      ...STYLES.input,
+                      background: '#070a0e',
+                      color: '#f8fafc'
                     }}
                   >
-                    <option value="founders">Founders & Core</option>
-                    <option value="engineering">Engineering</option>
-                    <option value="design">Design & Product</option>
-                    <option value="alumni">Past Team & Alumni</option>
+                    <option value="founders" style={{ background: '#0a0f1d', color: '#fff' }}>Founders & Core</option>
+                    <option value="engineering" style={{ background: '#0a0f1d', color: '#fff' }}>Engineering</option>
+                    <option value="design" style={{ background: '#0a0f1d', color: '#fff' }}>Design & Product</option>
+                    <option value="alumni" style={{ background: '#0a0f1d', color: '#fff' }}>Past Team & Alumni</option>
                   </select>
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                  <label style={STYLES.label}>
                     Status Tag
                   </label>
                   <input
@@ -878,18 +888,14 @@ export default function BuildersManagementPage() {
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value)}
                     placeholder="e.g. Core Team / Past Builder"
-                    style={{
-                      width: '100%', padding: '9px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 13
-                    }}
+                    style={STYLES.input}
                   />
                 </div>
               </div>
 
               {/* Avatar Upload / URL */}
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                <label style={STYLES.label}>
                   Profile Photo (URL or File Upload)
                 </label>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -897,13 +903,13 @@ export default function BuildersManagementPage() {
                     <img
                       src={formAvatar}
                       alt="Preview"
-                      style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', border: '1px solid #00dbe9' }}
+                      style={{ width: 44, height: 44, borderRadius: 12, objectFit: 'cover', border: '1.5px solid #00dbe9', flexShrink: 0 }}
                     />
                   ) : (
                     <div style={{
-                      width: 44, height: 44, borderRadius: 12, background: tokens.colors.surfaceBg,
-                      border: `1px solid ${tokens.colors.borderLight}`, display: 'flex', alignItems: 'center',
-                      justifyContent: 'center', color: tokens.colors.textTertiary, fontSize: 11
+                      width: 44, height: 44, borderRadius: 12, background: '#070a0e',
+                      border: '1px solid rgba(255, 255, 255, 0.15)', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', color: '#64748b', fontSize: 11, flexShrink: 0
                     }}>
                       No Pic
                     </div>
@@ -914,17 +920,13 @@ export default function BuildersManagementPage() {
                     value={formAvatar}
                     onChange={(e) => setFormAvatar(e.target.value)}
                     placeholder="https://... image url"
-                    style={{
-                      flex: 1, padding: '9px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 13
-                    }}
+                    style={{ ...STYLES.input, flex: 1 }}
                   />
 
                   <label style={{
-                    padding: '8px 14px', borderRadius: 8, background: tokens.colors.surfaceBg,
-                    border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
-                    fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                    padding: '9px 16px', borderRadius: 8, background: 'rgba(0, 219, 233, 0.1)',
+                    border: '1px solid rgba(0, 219, 233, 0.3)', color: '#00dbe9',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap'
                   }}>
                     Upload
                     <input type="file" accept="image/*" onChange={handleImageFileUpload} style={{ display: 'none' }} />
@@ -934,18 +936,18 @@ export default function BuildersManagementPage() {
 
               {/* Bio */}
               <div style={{ marginBottom: 14 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                <label style={STYLES.label}>
                   Bio Narrative
                 </label>
                 <textarea
-                  rows={2}
+                  rows={3}
                   value={formBio}
                   onChange={(e) => setFormBio(e.target.value)}
-                  placeholder="Short summary of roles and achievements..."
+                  placeholder="Short summary of roles, systems architected, and achievements..."
                   style={{
-                    width: '100%', padding: '9px 12px', borderRadius: 8,
-                    background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                    color: tokens.colors.textPrimary, fontSize: 13, resize: 'vertical'
+                    ...STYLES.input,
+                    lineHeight: 1.5,
+                    resize: 'vertical'
                   }}
                 />
               </div>
@@ -953,7 +955,7 @@ export default function BuildersManagementPage() {
               {/* Contributions Bullet Points */}
               <div style={{ marginBottom: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary }}>
+                  <label style={STYLES.label}>
                     Key Architectural Contributions (Bullet Points)
                   </label>
                   <button
@@ -966,25 +968,21 @@ export default function BuildersManagementPage() {
                 </div>
 
                 {formContributions.map((point, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                     <input
                       type="text"
                       value={point}
                       onChange={(e) => handleContributionChange(idx, e.target.value)}
                       placeholder={`Contribution bullet #${idx + 1}`}
-                      style={{
-                        flex: 1, padding: '8px 12px', borderRadius: 8,
-                        background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                        color: tokens.colors.textPrimary, fontSize: 12.5
-                      }}
+                      style={{ ...STYLES.input, flex: 1 }}
                     />
                     {formContributions.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveContribution(idx)}
-                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0 6px' }}
                       >
-                        <Trash2 size={15} />
+                        <Trash2 size={16} />
                       </button>
                     )}
                   </div>
@@ -993,7 +991,7 @@ export default function BuildersManagementPage() {
 
               {/* Skills Tags */}
               <div style={{ marginBottom: 16 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 6 }}>
+                <label style={STYLES.label}>
                   Tech Stack / Skills (e.g. React, Node.js, PostgreSQL)
                 </label>
                 <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
@@ -1008,19 +1006,15 @@ export default function BuildersManagementPage() {
                       }
                     }}
                     placeholder="Type skill and press Add or Enter"
-                    style={{
-                      flex: 1, padding: '8px 12px', borderRadius: 8,
-                      background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                      color: tokens.colors.textPrimary, fontSize: 12.5
-                    }}
+                    style={{ ...STYLES.input, flex: 1 }}
                   />
                   <button
                     type="button"
                     onClick={handleAddSkill}
                     style={{
-                      padding: '8px 14px', borderRadius: 8, background: tokens.colors.surfaceBg,
-                      border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
-                      fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                      padding: '8px 16px', borderRadius: 8, background: '#070a0e',
+                      border: '1px solid rgba(0, 219, 233, 0.3)', color: '#00dbe9',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer'
                     }}
                   >
                     Add
@@ -1032,16 +1026,16 @@ export default function BuildersManagementPage() {
                     <span
                       key={skill}
                       style={{
-                        fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
-                        background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`,
-                        color: tokens.colors.textPrimary, display: 'inline-flex', alignItems: 'center', gap: 6
+                        fontSize: 11, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                        background: '#070a0e', border: '1px solid rgba(0, 219, 233, 0.3)',
+                        color: '#f8fafc', display: 'inline-flex', alignItems: 'center', gap: 6
                       }}
                     >
                       <span>{skill}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveSkill(skill)}
-                        style={{ background: 'transparent', border: 'none', color: tokens.colors.textTertiary, cursor: 'pointer', padding: 0 }}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
                       >
                         &times;
                       </button>
@@ -1051,8 +1045,8 @@ export default function BuildersManagementPage() {
               </div>
 
               {/* Social Links */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: tokens.colors.textSecondary, marginBottom: 8 }}>
+              <div style={{ marginBottom: 22 }}>
+                <label style={STYLES.label}>
                   Verified Social Platform Links
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -1061,42 +1055,42 @@ export default function BuildersManagementPage() {
                     value={formSocials.github || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, github: e.target.value })}
                     placeholder="GitHub URL"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                   <input
                     type="text"
                     value={formSocials.linkedin || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, linkedin: e.target.value })}
                     placeholder="LinkedIn URL"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                   <input
                     type="text"
                     value={formSocials.twitter || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, twitter: e.target.value })}
                     placeholder="X / Twitter URL"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                   <input
                     type="text"
                     value={formSocials.instagram || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, instagram: e.target.value })}
                     placeholder="Instagram URL"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                   <input
                     type="text"
                     value={formSocials.cpaUsername || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, cpaUsername: e.target.value })}
                     placeholder="CPA Username (e.g. sayajikapse)"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                   <input
                     type="email"
                     value={formSocials.email || ''}
                     onChange={(e) => setFormSocials({ ...formSocials, email: e.target.value })}
                     placeholder="Email address"
-                    style={{ padding: '8px 10px', borderRadius: 8, background: tokens.colors.surfaceBg, border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary, fontSize: 12 }}
+                    style={STYLES.input}
                   />
                 </div>
               </div>
@@ -1107,8 +1101,8 @@ export default function BuildersManagementPage() {
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   style={{
-                    padding: '9px 18px', borderRadius: 10, background: tokens.colors.surfaceBg,
-                    border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textSecondary,
+                    padding: '9px 18px', borderRadius: 10, background: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.15)', color: '#94a3b8',
                     fontSize: 13, fontWeight: 600, cursor: 'pointer'
                   }}
                 >
@@ -1118,9 +1112,10 @@ export default function BuildersManagementPage() {
                   type="submit"
                   disabled={saving}
                   style={{
-                    padding: '9px 22px', borderRadius: 10, background: 'linear-gradient(135deg, #00dbe9, #2563eb)',
+                    padding: '9px 24px', borderRadius: 10, background: 'linear-gradient(135deg, #00dbe9, #2563eb)',
                     color: '#fff', fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
-                    display: 'inline-flex', alignItems: 'center', gap: 6
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    boxShadow: '0 4px 14px rgba(0, 219, 233, 0.3)'
                   }}
                 >
                   {saving && <Loader2 size={14} className="animate-spin" />}
@@ -1135,25 +1130,26 @@ export default function BuildersManagementPage() {
       {/* ── JSON Export / Import Modal ── */}
       {isJsonModalOpen && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20, zIndex: 9999, backdropFilter: 'blur(5px)'
+          padding: 20, zIndex: 9999, backdropFilter: 'blur(6px)'
         }}>
           <div style={{
-            background: tokens.colors.surfaceCard, border: `1px solid ${tokens.colors.borderLight}`,
+            background: '#0c1120', border: '1px solid rgba(0, 219, 233, 0.3)',
             borderRadius: 20, maxWidth: 740, width: '100%', maxHeight: '90vh',
-            overflowY: 'auto', padding: 28, boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+            overflowY: 'auto', padding: 28, boxShadow: '0 25px 60px rgba(0,0,0,0.7)',
+            color: '#f8fafc'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <FileCode size={20} style={{ color: '#00dbe9' }} />
-                <h2 style={{ fontSize: 19, fontWeight: 800, color: tokens.colors.textPrimary, margin: 0 }}>
+                <h2 style={{ fontSize: 19, fontWeight: 800, color: '#f8fafc', margin: 0 }}>
                   builders.json Configuration & Export
                 </h2>
               </div>
               <button
                 onClick={() => setIsJsonModalOpen(false)}
-                style={{ background: 'transparent', border: 'none', color: tokens.colors.textSecondary, cursor: 'pointer' }}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
               >
                 <X size={20} />
               </button>
@@ -1165,9 +1161,9 @@ export default function BuildersManagementPage() {
                 onClick={() => setJsonTab('export')}
                 style={{
                   padding: '6px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-                  background: jsonTab === 'export' ? '#00dbe9' : tokens.colors.surfaceBg,
-                  color: jsonTab === 'export' ? '#000' : tokens.colors.textSecondary,
-                  border: `1px solid ${tokens.colors.borderLight}`, cursor: 'pointer'
+                  background: jsonTab === 'export' ? '#00dbe9' : '#070a0e',
+                  color: jsonTab === 'export' ? '#000' : '#94a3b8',
+                  border: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'pointer'
                 }}
               >
                 Export / Download JSON
@@ -1176,9 +1172,9 @@ export default function BuildersManagementPage() {
                 onClick={() => setJsonTab('import')}
                 style={{
                   padding: '6px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 600,
-                  background: jsonTab === 'import' ? '#00dbe9' : tokens.colors.surfaceBg,
-                  color: jsonTab === 'import' ? '#000' : tokens.colors.textSecondary,
-                  border: `1px solid ${tokens.colors.borderLight}`, cursor: 'pointer'
+                  background: jsonTab === 'import' ? '#00dbe9' : '#070a0e',
+                  color: jsonTab === 'import' ? '#000' : '#94a3b8',
+                  border: '1px solid rgba(255, 255, 255, 0.12)', cursor: 'pointer'
                 }}
               >
                 Import & Replace JSON
@@ -1190,8 +1186,9 @@ export default function BuildersManagementPage() {
               value={jsonText}
               onChange={(e) => setJsonText(e.target.value)}
               style={{
-                width: '100%', padding: '12px 14px', borderRadius: 10,
-                background: '#090d13', border: `1px solid ${tokens.colors.borderLight}`,
+                width: '100%', boxSizing: 'border-box',
+                padding: '12px 14px', borderRadius: 10,
+                background: '#070a0e', border: '1px solid rgba(255, 255, 255, 0.15)',
                 color: '#38bdf8', fontFamily: 'monospace', fontSize: 12, lineHeight: 1.5,
                 marginBottom: 20, resize: 'vertical'
               }}
@@ -1204,8 +1201,8 @@ export default function BuildersManagementPage() {
                     onClick={handleDownloadJson}
                     style={{
                       display: 'inline-flex', alignItems: 'center', gap: 6,
-                      padding: '8px 16px', borderRadius: 8, background: tokens.colors.surfaceBg,
-                      border: `1px solid ${tokens.colors.borderLight}`, color: tokens.colors.textPrimary,
+                      padding: '8px 16px', borderRadius: 8, background: '#070a0e',
+                      border: '1px solid rgba(255, 255, 255, 0.15)', color: '#f8fafc',
                       fontSize: 12.5, fontWeight: 600, cursor: 'pointer'
                     }}
                   >
