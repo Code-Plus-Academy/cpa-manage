@@ -170,6 +170,30 @@ async function ensureTable() {
   }
 }
 
+// ── GET /admin/builders/platform-users — Search platform users for auto-fill ─
+router.get('/platform-users', async (req, res) => {
+  try {
+    const q = req.query.q ? `%${req.query.q.trim()}%` : null;
+    let queryText = `
+      SELECT 
+        id, username, name, email, avatar_url, bio, headline, account_type
+      FROM users
+    `;
+    const params = [];
+    if (q) {
+      params.push(q);
+      queryText += ` WHERE (username ILIKE $1 OR name ILIKE $1 OR email ILIKE $1)`;
+    }
+    queryText += ` ORDER BY created_at DESC LIMIT 100`;
+
+    const { rows } = await query(queryText, params);
+    res.json({ users: rows });
+  } catch (err) {
+    console.error('[GET /admin/builders/platform-users]', err.message);
+    res.status(200).json({ users: [] });
+  }
+});
+
 // ── GET /admin/builders — List all builders ───────────────────────────────────
 router.get('/', async (req, res) => {
   try {

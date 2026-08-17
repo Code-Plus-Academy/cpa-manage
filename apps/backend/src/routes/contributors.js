@@ -14,7 +14,7 @@ async function ensureContributorsTable() {
     await query(`
       CREATE TABLE IF NOT EXISTS featured_contributors (
         id SERIAL PRIMARY KEY,
-        user_id INT NOT NULL,
+        user_id TEXT NOT NULL,
         role_title TEXT,
         badge TEXT,
         featured_at TIMESTAMPTZ DEFAULT NOW()
@@ -46,17 +46,17 @@ router.get('/', async (req, res, next) => {
       let queryText = `
         SELECT
           u.id, u.username, u.name, u.email, u.avatar_url,
-          u.account_type, u.created_at,
+          u.account_type, u.created_at, u.bio, u.headline,
           COALESCE(
             (SELECT institution FROM user_education WHERE user_id = u.id ORDER BY created_at DESC LIMIT 1),
             u.location,
-            'Autonomous Tech Institute'
+            ''
           ) AS college_name,
           fc.role_title, fc.badge, fc.featured_at,
           (fc.user_id IS NOT NULL) AS is_featured,
           COALESCE((SELECT COUNT(*) FROM posts WHERE creator_id = u.id), 0)::int AS posts_count
         FROM users u
-        LEFT JOIN featured_contributors fc ON fc.user_id = u.id
+        LEFT JOIN featured_contributors fc ON fc.user_id::text = u.id::text
       `;
 
       const params = [];
@@ -79,9 +79,9 @@ router.get('/', async (req, res, next) => {
           fc.role_title, fc.badge, fc.featured_at,
           (fc.user_id IS NOT NULL) AS is_featured,
           0::int AS posts_count,
-          'Autonomous Tech Institute' AS college_name
+          '' AS college_name
         FROM users u
-        LEFT JOIN featured_contributors fc ON fc.user_id = u.id
+        LEFT JOIN featured_contributors fc ON fc.user_id::text = u.id::text
       `;
       const params = [];
       if (q) {

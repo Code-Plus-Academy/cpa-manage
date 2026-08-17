@@ -165,6 +165,7 @@ export default function BuildersManagementPage() {
   // Modal states for Add/Edit
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBuilderId, setEditingBuilderId] = useState(null);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   const [formName, setFormName] = useState('');
   const [formRole, setFormRole] = useState('');
   const [formCategory, setFormCategory] = useState('engineering');
@@ -234,18 +235,26 @@ export default function BuildersManagementPage() {
     }
   };
 
-  const loadPlatformUsers = async () => {
+  const loadPlatformUsers = async (searchTerm = '') => {
     try {
-      const res = await apiFetch('/admin/contributors');
+      const endpoint = searchTerm
+        ? `/admin/builders/platform-users?q=${encodeURIComponent(searchTerm)}`
+        : `/admin/builders/platform-users`;
+      let res = await apiFetch(endpoint);
+      if (!res.ok) {
+        res = await apiFetch(searchTerm ? `/admin/contributors?q=${encodeURIComponent(searchTerm)}` : '/admin/contributors');
+      }
       if (res.ok) {
         const data = await res.json();
-        setPlatformUsers(data.users || data.contributors || []);
+        const list = data.users || data.contributors || [];
+        setPlatformUsers(list);
       }
     } catch (_) {}
   };
 
   const handleOpenAdd = () => {
     setEditingBuilderId(null);
+    setUserSearchQuery('');
     setFormName('');
     setFormRole('');
     setFormCategory('engineering');
@@ -259,10 +268,12 @@ export default function BuildersManagementPage() {
     setActionError('');
     setActionSuccess('');
     setIsModalOpen(true);
+    loadPlatformUsers();
   };
 
   const handleOpenEdit = (b) => {
     setEditingBuilderId(b.id);
+    setUserSearchQuery('');
     setFormName(b.name || '');
     setFormRole(b.role || '');
     setFormCategory(b.teamCategory || b.team_category || 'engineering');
@@ -276,6 +287,7 @@ export default function BuildersManagementPage() {
     setActionError('');
     setActionSuccess('');
     setIsModalOpen(true);
+    loadPlatformUsers();
   };
 
   const handleAutoFillUser = (u) => {
@@ -283,11 +295,19 @@ export default function BuildersManagementPage() {
     setFormName(u.name || u.username || '');
     setFormAvatar(u.avatar_url || '');
     if (u.username) {
-      setFormSocials(prev => ({ ...prev, cpaUsername: u.username }));
+      setFormSocials(prev => ({ 
+        ...prev, 
+        cpaUsername: u.username,
+        email: u.email || prev.email || ''
+      }));
     }
     if (u.bio && !formBio) {
       setFormBio(u.bio);
+    } else if (u.headline && !formBio) {
+      setFormBio(u.headline);
     }
+    setActionSuccess(`Auto-filled details for @${u.username}`);
+    setTimeout(() => setActionSuccess(''), 3000);
   };
 
   const handleAddContribution = () => {
@@ -801,13 +821,56 @@ export default function BuildersManagementPage() {
             )}
 
             {/* Quick Auto-Fill from Platform User */}
-            <div style={{ marginBottom: 20, padding: 14, borderRadius: 12, background: '#070a0e', border: '1px solid rgba(0, 219, 233, 0.2)' }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: '#00dbe9', textTransform: 'uppercase', marginBottom: 6, fontFamily: 'monospace' }}>
-                ⚡ Auto-Fill from Registered Platform User:
+            <div style={{
+              marginBottom: 20, padding: 16, borderRadius: 14,
+              background: '#070a0e', border: '1px solid rgba(0, 219, 233, 0.3)',
+              boxShadow: '0 4px 20px rgba(0, 219, 233, 0.05)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: '#00dbe9', textTransform: 'uppercase', fontFamily: 'monospace' }}>
+                  ⚡ Auto-Fill from Registered Platform User
+                </div>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  {platformUsers.length} user{platformUsers.length !== 1 ? 's' : ''} found
+                </span>
               </div>
+
+              {/* Search Bar */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                <div style={{ position: 'relative', flex: 1 }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: 11, color: '#64748b' }} />
+                  <input
+                    type="text"
+                    value={userSearchQuery}
+                    onChange={(e) => {
+                      setUserSearchQuery(e.target.value);
+                      loadPlatformUsers(e.target.value);
+                    }}
+                    placeholder="Search by @username, full name, or email..."
+                    style={{
+                      ...STYLES.input,
+                      paddingLeft: 30,
+                      background: '#0a0f1d'
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadPlatformUsers(userSearchQuery)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, background: '#0a0f1d',
+                    border: '1px solid rgba(0, 219, 233, 0.3)', color: '#00dbe9',
+                    fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}
+                >
+                  Search
+                </button>
+              </div>
+
+              {/* Select Dropdown */}
               <select
                 onChange={(e) => {
-                  const selectedUser = platformUsers.find(u => String(u.id) === e.target.value);
+                  const selectedUser = platformUsers.find(u => String(u.id) === e.target.value || u.username === e.target.value);
                   if (selectedUser) handleAutoFillUser(selectedUser);
                 }}
                 style={{
@@ -816,13 +879,22 @@ export default function BuildersManagementPage() {
                   color: '#f8fafc'
                 }}
               >
-                <option value="" style={{ background: '#0a0f1d', color: '#94a3b8' }}>-- Choose Registered User to Auto-Fill --</option>
+                <option value="" style={{ background: '#0a0f1d', color: '#94a3b8' }}>
+                  -- Select User to Auto-Fill ({platformUsers.length} available) --
+                </option>
                 {platformUsers.map(u => (
-                  <option key={u.id} value={u.id} style={{ background: '#0a0f1d', color: '#fff' }}>
-                    {u.name || u.username} (@{u.username})
+                  <option key={u.id || u.username} value={u.id || u.username} style={{ background: '#0a0f1d', color: '#fff' }}>
+                    {u.name || u.username} (@{u.username}) {u.email ? `• ${u.email}` : ''}
                   </option>
                 ))}
               </select>
+
+              {actionSuccess && (
+                <div style={{ fontSize: 12, color: '#10b981', marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <CheckCircle2 size={14} />
+                  <span>{actionSuccess}</span>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleSaveBuilder}>
