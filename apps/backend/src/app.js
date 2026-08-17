@@ -75,6 +75,7 @@ app.use('/webhook', webhookRoutes);
 app.use('/api/hiring', hiringRoutes);
 app.use('/api/career', hiringRoutes);
 app.use('/api/careers', hiringRoutes);
+app.use('/api/builders', buildersRoutes);
 
 // ─── Auth routes (login/logout BEFORE requireAdminAuth) ────────────────────────
 app.use('/admin/auth', authRoutes);

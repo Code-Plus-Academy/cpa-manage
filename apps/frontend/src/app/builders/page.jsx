@@ -194,7 +194,10 @@ export default function BuildersManagementPage() {
     setDataLoading(true);
     setActionError('');
     try {
-      const res = await apiFetch('/admin/builders');
+      let res = await apiFetch('/admin/builders');
+      if (!res.ok) {
+        res = await apiFetch('/api/builders');
+      }
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.builders) && data.builders.length > 0) {
